@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Журнал производства</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ===== Экран 1: начало смены ===== -->
+  <section id="screen-start" class="screen screen--center">
+    <div class="card card--start" id="start-step-1">
+      <h1 class="card__title">Журнал производства</h1>
+      <button class="btn btn--oval" id="btn-take-shift">Заступить на смену</button>
+    </div>
+
+    <form class="card card--form" id="start-step-2" hidden>
+      <h2 class="card__title">Данные смены</h2>
+
+      <label class="field">
+        <span class="field__label">Мастер</span>
+        <select id="f-master" required></select>
+      </label>
+
+      <label class="field" id="f-master-other-wrap" hidden>
+        <span class="field__label">Фамилия мастера</span>
+        <input id="f-master-other" type="text" placeholder="Введите фамилию" autocomplete="off">
+      </label>
+
+      <div class="field">
+        <span class="field__label">Тип смены</span>
+        <div class="segmented" id="f-type"></div>
+      </div>
+
+      <div class="field">
+        <span class="field__label">Начало смены</span>
+        <div class="field__auto" id="f-start">—</div>
+      </div>
+
+      <div class="card__actions">
+        <button type="button" class="btn btn--ghost" id="btn-back">Назад</button>
+        <button type="submit" class="btn btn--oval">Начать смену</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ===== Экран 2: основное окно ===== -->
+  <section id="screen-main" class="screen" hidden>
+    <div class="app">
+      <div class="box app__clock">
+        <div class="clock__time" id="clock-time">--:--</div>
+        <div class="clock__date" id="clock-date"></div>
+        <div class="clock__weekday" id="clock-weekday"></div>
+      </div>
+
+      <div class="box app__info" id="shift-info"></div>
+
+      <button class="box app__end" id="btn-end-shift">Закончить<br>смену</button>
+
+      <nav class="app__nav">
+        <div class="nav__tabs" id="nav-tabs"></div>
+        <button class="tab tab--settings" id="btn-settings" title="Настройки">
+          <span class="tab__icon" data-icon="settings"></span>
+          <span class="tab__label">Настройки</span>
+        </button>
+      </nav>
+
+      <main class="box app__panel">
+        <div class="panel__content" id="panel"></div>
+        <button class="fab" id="fab" hidden></button>
+      </main>
+    </div>
+  </section>
+
+  <!-- ===== Модальное окно ===== -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal__card">
+      <h3 class="modal__title" id="modal-title"></h3>
+      <div class="modal__body" id="modal-body"></div>
+      <div class="modal__actions" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

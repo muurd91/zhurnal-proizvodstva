@@ -1,0 +1,361 @@
+/* ================= Палитра ================= */
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --text: #1c2430;
+  --muted: #6b7684;
+  --border: #c9d1dc;
+  --accent: #2f6fd6;
+  --accent-text: #ffffff;
+  --accent-soft: #e3ecfb;
+  --danger: #d93a3a;
+  --warning: #f2b705;
+
+  --radius: 14px;
+  --radius-lg: 24px;
+  --gap: clamp(8px, 1.2vmin, 16px);
+  --side: clamp(76px, 20vw, 200px);
+  --touch: 48px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Режим настроек — временная палитра, окончательную выберем позже */
+body.is-admin {
+  --bg: #2a2f38;
+  --surface: #353b46;
+  --text: #f1f3f6;
+  --muted: #a7b0bd;
+  --border: #4d5563;
+  --accent: #e08a1e;
+  --accent-text: #1c1c1c;
+  --accent-soft: #4a3f30;
+}
+
+/* ================= База ================= */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: clamp(14px, 1.6vmin + 6px, 18px);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .3s, color .3s;
+}
+
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.muted { color: var(--muted); }
+.error { color: var(--danger); margin: 0; }
+
+.screen { height: 100dvh; }
+.screen--center {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+/* ================= Кнопки ================= */
+.btn {
+  min-height: var(--touch);
+  padding: 0 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.btn--oval, .btn--primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.btn--oval {
+  min-height: 64px;
+  padding: 0 48px;
+  border-radius: 999px;
+  font-size: 1.15em;
+}
+.btn--ghost { background: transparent; }
+.btn:active { transform: scale(.98); }
+
+/* ================= Карточки начала смены ================= */
+.card {
+  width: min(480px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: clamp(24px, 5vmin, 48px);
+  box-shadow: 0 10px 40px rgb(0 0 0 / .08);
+}
+.card--start {
+  display: grid;
+  justify-items: center;
+  gap: 32px;
+  text-align: center;
+}
+.card--form { display: grid; gap: 20px; }
+.card__title { margin: 0; font-size: 1.4em; }
+.card__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* ================= Поля ================= */
+.field { display: grid; gap: 6px; }
+.field__label { font-size: .85em; color: var(--muted); }
+.field input, .field select {
+  min-height: var(--touch);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.field__auto {
+  min-height: var(--touch);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.segmented__btn {
+  min-height: calc(var(--touch) - 8px);
+  border: 0;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+}
+.segmented__btn.is-active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+/* ================= Основное окно (раскладка по макету osnova) ================= */
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: var(--side) minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "clock info end"
+    "nav   panel panel";
+  gap: var(--gap);
+  padding: var(--gap) var(--gap) 0 0;
+}
+
+.box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* Часы с календарём */
+.app__clock {
+  grid-area: clock;
+  margin-left: var(--gap);
+  padding: 12px 8px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  min-height: clamp(90px, 14vh, 170px);
+}
+.clock__time { font-size: clamp(1.4em, 3.4vmin, 2.6em); font-weight: 700; font-variant-numeric: tabular-nums; }
+.clock__date { font-size: .85em; margin-top: 4px; }
+.clock__weekday { font-size: .8em; color: var(--muted); }
+
+/* Информация о смене */
+.app__info {
+  grid-area: info;
+  min-width: 0;
+  padding: 12px 20px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 2px;
+}
+.info__type { font-size: 1.2em; font-weight: 700; }
+.info__row { color: var(--muted); }
+.info__row b { color: var(--text); }
+
+/* Кнопка «Закончить смену» */
+.app__end {
+  min-width: 0;
+  grid-area: end;
+  width: clamp(110px, 18vw, 220px);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.app__end:hover { border-color: var(--danger); color: var(--danger); }
+
+/* Боковая навигация: 6 вкладок по центру, настройки внизу */
+.app__nav {
+  grid-area: nav;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10vh 0 var(--gap);
+  min-height: 0;
+}
+.nav__tabs { display: grid; gap: 6px; }
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: clamp(56px, 7vh, 76px);
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--surface);
+  text-align: left;
+  font-size: .85em;
+  line-height: 1.15;
+  transition: background .15s, color .15s;
+}
+.tab.is-active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.tab__label { min-width: 0; hyphens: auto; overflow-wrap: break-word; }
+.tab__icon { flex: none; width: 26px; height: 26px; }
+.tab__icon svg { width: 100%; height: 100%; }
+
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 800;
+}
+.badge--red { background: var(--danger); color: #fff; }
+.badge--yellow { background: var(--warning); color: #1c1c1c; }
+
+/* Центральное поле */
+.app__panel {
+  grid-area: panel;
+  min-width: 0;
+  position: relative;
+  min-height: 0;
+  border-bottom: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow: hidden;
+}
+.panel__content {
+  height: 100%;
+  overflow-y: auto;
+  padding: clamp(16px, 3vmin, 32px);
+  padding-bottom: 120px; /* место под кружок */
+}
+.panel__title { margin: 0 0 16px; font-size: 1.4em; }
+.panel__admin {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: .8em;
+  font-weight: 600;
+}
+
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-top: 15vh;
+  text-align: center;
+}
+.empty p { margin: 0; }
+.empty__icon { width: 64px; height: 64px; color: var(--muted); margin-bottom: 8px; }
+.empty__icon svg { width: 100%; height: 100%; }
+
+/* Кружок в правом нижнем углу */
+.fab {
+  position: absolute;
+  right: clamp(16px, 3vmin, 32px);
+  bottom: clamp(16px, 3vmin, 32px);
+  width: clamp(60px, 8vmin, 80px);
+  height: clamp(60px, 8vmin, 80px);
+  padding: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 6px 20px rgb(0 0 0 / .2);
+}
+.fab svg { width: 100%; height: 100%; }
+.fab:active { transform: scale(.95); }
+
+/* ================= Модальное окно ================= */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / .4);
+  z-index: 10;
+}
+.modal__card {
+  width: min(440px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 20px 60px rgb(0 0 0 / .25);
+}
+.modal__title { margin: 0; font-size: 1.2em; }
+.modal__body { display: grid; gap: 14px; }
+.modal__body p { margin: 0; }
+.modal__actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.settings-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+/* ================= Адаптация ================= */
+
+/* Узкие экраны (вертикальный планшет поменьше, телефон): вкладки только иконками */
+@media (max-width: 700px) {
+  .tab { justify-content: center; padding: 8px; }
+  .tab__label { display: none; }
+  .app__info { padding: 8px 10px; font-size: .9em; }
+  .app__end { width: 90px; font-size: .85em; }
+}
+
+/* Горизонтальная ориентация и мониторы — раскладка как на ноутбуке */
+@media (orientation: landscape) {
+  :root { --side: clamp(76px, 15vw, 220px); }
+  .app__nav { padding-top: 4vh; }
+  .app__clock { min-height: 0; }
+}
+
+/* Большие мониторы: держим пропорции ноутбука, не растягиваем на всю ширину */
+@media (min-width: 1600px) {
+  .app { max-width: 1600px; margin: 0 auto; }
+}
