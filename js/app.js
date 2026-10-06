@@ -1,5 +1,6 @@
-// ================= Хранилище =================
-// Пока всё хранится локально в браузере (localStorage).
+// ================= Настройки устройства =================
+// Только то, что относится к конкретному планшету/ПК (например, открытая вкладка).
+// Рабочие данные — в файле данных, см. data.js.
 const store = {
   get(key, fallback) {
     try {
@@ -16,9 +17,9 @@ const store = {
 };
 
 const state = {
-  shift: store.get('shift', null), // { master, type, start }
   tab: store.get('tab', 'current'),
   admin: false,                     // режим настроек, не сохраняется
+  editing: false,                   // редактирование текущей вкладки (только в режиме настроек)
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -119,9 +120,9 @@ $('#start-step-2').addEventListener('submit', (e) => {
   const sel = $('#f-master').value;
   const master = sel === OTHER ? $('#f-master-other').value.trim() : sel;
   if (!master) return;
-  state.shift = { master, type: formType, start: plannedStart(formType).toISOString() };
-  store.set('shift', state.shift);
-  showMainScreen();
+  DB.update((d) => {
+    d.currentShift = { id: uid(), master, type: formType, start: plannedStart(formType).toISOString() };
+  });
 });
 
 // ================= Основное окно =================
@@ -141,9 +142,10 @@ function tickClock() {
 }
 
 function renderShiftInfo() {
-  if (!state.shift) return;
-  const { master, type } = state.shift;
-  const start = new Date(state.shift.start);
+  const shift = DB.data.currentShift;
+  if (!shift) return;
+  const { master, type } = shift;
+  const start = new Date(shift.start);
   const end = plannedEnd(type, start);
   $('#shift-info').innerHTML = `
     <div class="info__type">${CONFIG.shiftTypes[type].label} смена</div>
@@ -165,8 +167,7 @@ function renderNav() {
 
 // Уведомления на вкладках: red — есть заявки на ремонт, yellow — запчасти ниже минимума.
 function getBadges() {
-  const repairs = store.get('repairs', []);
-  const parts = store.get('parts', []);
+  const { repairs, parts } = DB.data;
   return {
     repair: repairs.length ? 'red' : null,
     warehouse: parts.some((p) => p.qty < p.min) ? 'yellow' : null,
@@ -177,6 +178,7 @@ $('#nav-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-tab]');
   if (!btn) return;
   state.tab = btn.dataset.tab;
+  state.editing = false;
   store.set('tab', state.tab);
   renderNav();
   renderTab();
@@ -199,16 +201,29 @@ const FAB_TITLES = {
   manuals: 'Поиск решения по ошибке',
 };
 
+// Что можно менять во вкладке в режиме настроек.
+const EDIT_HINTS = {
+  current:   'Редактирование и удаление поломок.',
+  history:   'Редактирование и удаление поломок.',
+  equipment: 'Добавление и редактирование подгрупп и оборудования.',
+  repair:    'Редактирование и удаление заявок.',
+  warehouse: 'Редактирование подгрупп и типов запчастей.',
+  manuals:   'Добавление и удаление мануалов.',
+};
+
 function renderTab() {
   const tab = CONFIG.tabs.find((t) => t.id === state.tab) || CONFIG.tabs[0];
-  $('#panel').innerHTML = `
-    <h2 class="panel__title">${tab.label}</h2>
-    ${state.admin ? '<div class="panel__admin">Режим редактирования</div>' : ''}
+  const editing = state.admin && state.editing;
+  const body = TAB_VIEWS[tab.id] ? TAB_VIEWS[tab.id]() : `
     <div class="empty">
       <div class="empty__icon">${ICONS[tab.icon]}</div>
       <p>${TAB_STUBS[tab.id]}</p>
       <p class="muted">Раздел в разработке</p>
     </div>`;
+  $('#panel').innerHTML = `
+    <h2 class="panel__title">${tab.label}</h2>
+    ${editing ? `<div class="panel__admin">Редактирование: ${EDIT_HINTS[tab.id]}</div>` : ''}
+    ${body}`;
 
   const fab = $('#fab');
   fab.hidden = !tab.fab;
@@ -216,6 +231,126 @@ function renderTab() {
     fab.innerHTML = ICONS[tab.fab];
     fab.title = FAB_TITLES[tab.id];
   }
+
+  const edit = $('#btn-edit');
+  edit.hidden = !state.admin;
+  edit.classList.toggle('is-active', editing);
+  edit.querySelector('.edit-btn__label').textContent = editing ? 'Готово' : 'Редактировать';
+}
+
+$('#btn-edit').addEventListener('click', () => {
+  // В перечне оборудования кнопка сразу открывает окно внесения данных.
+  if (state.tab === 'equipment') return openEquipmentForm();
+  state.editing = !state.editing;
+  renderTab();
+});
+
+// ================= Перечень оборудования =================
+// Запись: { id, group, name, mark, inv }
+const getEquipment = () => DB.data.equipment;
+const getGroups = () => [...new Set(getEquipment().map((e) => e.group))].sort((a, b) => a.localeCompare(b, 'ru'));
+
+function equipmentView() {
+  const list = getEquipment();
+  if (!list.length) {
+    return `
+      <div class="empty">
+        <div class="empty__icon">${ICONS.equipment}</div>
+        <p>Оборудование ещё не добавлено.</p>
+        <p class="muted">${state.admin ? 'Нажмите «Редактировать», чтобы внести первое оборудование.' : 'Добавить его можно в режиме настроек.'}</p>
+      </div>`;
+  }
+  return getGroups().map((g) => `
+    <section class="eq-group">
+      <h3 class="eq-group__title">${escapeHtml(g)}</h3>
+      <div class="eq-list">
+        ${list.filter((e) => e.group === g)
+          .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+          .map((e) => `
+          <button class="eq-item" data-eq="${e.id}">
+            <span class="eq-item__name">${escapeHtml(e.name)}</span>
+            <span class="eq-item__meta">
+              ${e.mark ? `<span>Маркировка: <b>${escapeHtml(e.mark)}</b></span>` : ''}
+              ${e.inv ? `<span>Инв. №: <b>${escapeHtml(e.inv)}</b></span>` : ''}
+            </span>
+          </button>`).join('')}
+      </div>
+    </section>`).join('');
+}
+
+const TAB_VIEWS = { equipment: equipmentView };
+
+$('#panel').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-eq]');
+  if (!item) return;
+  const eq = getEquipment().find((x) => x.id === item.dataset.eq);
+  if (state.admin) return openEquipmentForm(eq);
+  openModal(eq.name, '<p class="muted">История поломок появится, когда будет готова вкладка «Текущая смена».</p>', [
+    { label: 'Закрыть', primary: true },
+  ]);
+});
+
+const NEW_GROUP = '__new__';
+
+function openEquipmentForm(eq = null) {
+  const groups = getGroups();
+  const opts = groups.map((g) => `<option${eq && eq.group === g ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('');
+  openModal(eq ? 'Изменить оборудование' : 'Добавить оборудование', `
+    <label class="field">
+      <span class="field__label">Подгруппа</span>
+      <select id="eq-group">
+        ${groups.length && !eq ? '<option value="" disabled selected>Выберите подгруппу</option>' : ''}
+        ${opts}
+        <option value="${NEW_GROUP}"${groups.length ? '' : ' selected'}>+ Новая подгруппа…</option>
+      </select>
+    </label>
+    <label class="field" id="eq-group-new-wrap"${groups.length ? ' hidden' : ''}>
+      <span class="field__label">Название новой подгруппы</span>
+      <input id="eq-group-new" autocomplete="off">
+    </label>
+    <label class="field">
+      <span class="field__label">Наименование оборудования</span>
+      <input id="eq-name" autocomplete="off" value="${eq ? escapeHtml(eq.name) : ''}">
+    </label>
+    <label class="field">
+      <span class="field__label">Маркировка</span>
+      <input id="eq-mark" autocomplete="off" value="${eq ? escapeHtml(eq.mark) : ''}">
+    </label>
+    <label class="field">
+      <span class="field__label">Инвентарный номер</span>
+      <input id="eq-inv" autocomplete="off" value="${eq ? escapeHtml(eq.inv) : ''}">
+    </label>
+    <p class="error" id="eq-error" hidden></p>`, [
+    { label: 'Отмена' },
+    { label: 'Сохранить', primary: true, onClick: () => saveEquipment(eq) },
+  ]);
+
+  $('#eq-group').addEventListener('change', (e) => {
+    const isNew = e.target.value === NEW_GROUP;
+    $('#eq-group-new-wrap').hidden = !isNew;
+    if (isNew) $('#eq-group-new').focus();
+  });
+}
+
+function saveEquipment(eq) {
+  const val = (id) => $(id).value.trim();
+  const sel = $('#eq-group').value;
+  const group = sel === NEW_GROUP ? val('#eq-group-new') : sel;
+  const data = { group, name: val('#eq-name'), mark: val('#eq-mark'), inv: val('#eq-inv') };
+
+  const list = getEquipment();
+  const error = (msg) => { $('#eq-error').textContent = msg; $('#eq-error').hidden = false; return false; };
+  if (!data.group) return error('Укажите подгруппу.');
+  if (!data.name) return error('Укажите наименование оборудования.');
+  if (data.inv && list.some((x) => x.inv === data.inv && (!eq || x.id !== eq.id))) {
+    return error(`Инвентарный номер ${data.inv} уже есть в перечне.`);
+  }
+
+  DB.update((d) => {
+    const found = eq && d.equipment.find((x) => x.id === eq.id);
+    if (found) Object.assign(found, data);
+    else d.equipment.push({ id: uid(), ...data });
+  });
 }
 
 $('#fab').addEventListener('click', () => {
@@ -232,11 +367,11 @@ $('#btn-end-shift').addEventListener('click', () => {
       label: 'Закончить',
       primary: true,
       onClick: () => {
-        // TODO: перенос смены в историю
-        state.shift = null;
-        store.remove('shift');
         setAdmin(false);
-        showStartScreen();
+        DB.update((d) => {
+          if (d.currentShift) d.shifts.push({ ...d.currentShift, end: new Date().toISOString() });
+          d.currentShift = null;
+        });
       },
     },
   ]);
@@ -245,16 +380,30 @@ $('#btn-end-shift').addEventListener('click', () => {
 // ================= Настройки =================
 $('#btn-settings').addEventListener('click', () => {
   if (state.admin) {
+    const d = DB.data;
+    const updated = d.updatedAt ? new Date(d.updatedAt) : null;
     openModal('Настройки', `
+      <section class="data-box">
+        <h4 class="data-box__title">Файл данных</h4>
+        <p class="muted">
+          Изменён: ${updated ? `${fmtDate(updated)} ${fmtTime(updated)}` : 'ещё не изменялся'}<br>
+          Оборудования: ${d.equipment.length} · Смен в истории: ${d.shifts.length}
+        </p>
+        <div class="data-box__actions">
+          <button class="btn" id="btn-export">Скачать</button>
+          <button class="btn" id="btn-import">Загрузить</button>
+        </div>
+      </section>
       <ul class="settings-list">
-        <li>Оборудование и подгруппы</li>
         <li>Группы и виды запчастей</li>
         <li>Данные смен</li>
       </ul>
-      <p class="muted">Разделы настроек будут добавлены позже.</p>`, [
+      <p class="muted">Эти разделы настроек будут добавлены позже.</p>`, [
       { label: 'Выйти из настроек', onClick: () => setAdmin(false) },
       { label: 'Закрыть', primary: true },
     ]);
+    $('#btn-export').addEventListener('click', () => DB.exportFile());
+    $('#btn-import').addEventListener('click', () => $('#file-import').click());
     return;
   }
 
@@ -276,10 +425,35 @@ $('#btn-settings').addEventListener('click', () => {
   $('#m-login').focus();
 });
 
+// Загрузка файла данных: проверяем, показываем что внутри и только после подтверждения заменяем.
+$('#file-import').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  let incoming;
+  try { incoming = await DB.readFile(file); }
+  catch (err) {
+    openModal('Не удалось загрузить файл', `<p>${escapeHtml(err.message)}</p>`, [{ label: 'Закрыть', primary: true }]);
+    return;
+  }
+  const upd = incoming.updatedAt ? new Date(incoming.updatedAt) : null;
+  openModal('Заменить данные?', `
+    <p>Все текущие данные на этом устройстве будут заменены содержимым файла <b>${escapeHtml(file.name)}</b>.</p>
+    <p class="muted">
+      В файле: оборудования — ${incoming.equipment.length}, смен в истории — ${incoming.shifts.length}.<br>
+      Файл изменён: ${upd ? `${fmtDate(upd)} ${fmtTime(upd)}` : 'неизвестно'}.
+    </p>
+    <p class="muted">Совет: сначала скачайте текущий файл как резервную копию.</p>`, [
+    { label: 'Отмена' },
+    { label: 'Заменить', primary: true, onClick: () => DB.replace(incoming) },
+  ]);
+});
+
 function setAdmin(on) {
   state.admin = on;
+  state.editing = false;
   document.body.classList.toggle('is-admin', on);
-  if (state.shift) renderTab();
+  if (DB.data.currentShift) renderTab();
 }
 
 // ================= Модальное окно =================
@@ -316,6 +490,15 @@ function escapeHtml(s) {
 
 // ================= Запуск =================
 $('#btn-settings .tab__icon').innerHTML = ICONS.settings;
+$('#btn-edit .edit-btn__icon').innerHTML = ICONS.edit;
 tickClock();
 setInterval(tickClock, 1000);
-if (state.shift) showMainScreen(); else showStartScreen();
+
+// Экран всегда следует за данными: смена началась/закончилась (в том числе на другом устройстве) —
+// переключаемся; поменялись данные — перерисовываем.
+function renderApp() {
+  if (DB.data.currentShift) showMainScreen();
+  else if (!$('#screen-main').hidden) showStartScreen();
+}
+DB.onChange(renderApp);
+if (DB.data.currentShift) showMainScreen(); else showStartScreen();
