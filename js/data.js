@@ -18,6 +18,15 @@ function emptyData() {
     repairs: [],        // заявки на ремонт
     parts: [],          // запчасти на складе: { ..., qty, min }
     manuals: [],        // мануалы
+    settings: defaultSettings(), // данные смен: мастера, номера, время
+  };
+}
+
+function defaultSettings() {
+  return {
+    masters: [...CONFIG.masters],
+    shiftNumbers: [...CONFIG.shiftNumbers],
+    shiftTypes: JSON.parse(JSON.stringify(CONFIG.shiftTypes)),
   };
 }
 
@@ -37,6 +46,13 @@ function normalizeData(raw) {
   for (const key of Object.keys(base)) {
     if (Array.isArray(base[key]) && !Array.isArray(data[key])) data[key] = [];
   }
+  // Настройки смен: недостающие поля берём по умолчанию.
+  const s = data.settings && typeof data.settings === 'object' ? data.settings : {};
+  data.settings = {
+    masters: Array.isArray(s.masters) ? s.masters : base.settings.masters,
+    shiftNumbers: Array.isArray(s.shiftNumbers) ? s.shiftNumbers : base.settings.shiftNumbers,
+    shiftTypes: { ...base.settings.shiftTypes, ...(s.shiftTypes || {}) },
+  };
   return data;
 }
 

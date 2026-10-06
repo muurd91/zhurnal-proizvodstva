@@ -12,7 +12,9 @@
   <section id="screen-start" class="screen screen--center">
     <div class="card card--start" id="start-step-1">
       <h1 class="card__title">Журнал производства</h1>
+      <p class="start-running" id="start-running" hidden></p>
       <button class="btn btn--oval" id="btn-take-shift">Заступить на смену</button>
+      <button class="btn btn--ghost btn--viewer" id="btn-viewer">Режим зрителя</button>
     </div>
 
     <form class="card card--form" id="start-step-2" hidden>
@@ -26,6 +28,11 @@
       <label class="field" id="f-master-other-wrap" hidden>
         <span class="field__label">Фамилия мастера</span>
         <input id="f-master-other" type="text" placeholder="Введите фамилию" autocomplete="off">
+      </label>
+
+      <label class="field" id="f-number-wrap">
+        <span class="field__label">Номер смены</span>
+        <select id="f-number"></select>
       </label>
 
       <div class="field">
