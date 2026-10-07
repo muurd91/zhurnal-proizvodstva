@@ -21,6 +21,8 @@ const state = {
   eqPeriod: store.get('eqPeriod', '30'), // период статистики в перечне оборудования
   historyLimit: 20,                      // сколько смен показано в истории
   eqOpen: new Set(),                     // раскрытые строки в перечне оборудования
+  histOpen: new Set(),                   // раскрытые смены в истории (не сохраняется)
+  histSeeded: new Set(),                 // смены, которым уже выставили раскрытие по умолчанию
   admin: false,                     // режим настроек, не сохраняется
   editing: false,                   // редактирование текущей вкладки (только в режиме настроек)
   viewer: store.get('viewer', false), // режим зрителя: только просмотр, запоминается на устройстве
@@ -84,13 +86,26 @@ function showStartScreen() {
   $('#btn-take-shift').textContent = shift ? 'Продолжить смену' : 'Заступить на смену';
   $('#start-running').hidden = !shift;
   if (shift) $('#start-running').innerHTML = `Идёт ${shiftTitle(shift).toLowerCase()} · мастер <b>${escapeHtml(shift.master)}</b>`;
+  refreshStartScreen();
+}
+
+// Смена по расписанию и стоящие станки на стартовом экране; часы — в tickClock.
+function refreshStartScreen() {
+  if ($('#screen-start').hidden) return;
+  const type = currentShiftType();
+  const t = SETTINGS().shiftTypes[type];
+  $('#start-schedule').innerHTML = `Сейчас по расписанию: <b>${t.label.toLowerCase()}</b>, ${t.start}–${t.end}`;
+  const down = openBreakdowns().size;
+  $('#start-down').hidden = !down;
+  $('#start-down').textContent = `■ Стоят: ${down}`;
 }
 
 function openShiftForm() {
   const sel = $('#f-master');
   sel.innerHTML =
     '<option value="" disabled selected>Выберите из списка</option>' +
-    SETTINGS().masters.map((m) => `<option>${escapeHtml(m)}</option>`).join('') +
+    SETTINGS().masters.map((m) =>
+      `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}${m.number ? ` · смена № ${escapeHtml(m.number)}` : ''}</option>`).join('') +
     `<option value="${OTHER}">Другое…</option>`;
   $('#f-master-other').value = '';
   $('#f-master-other-wrap').hidden = true;
@@ -129,6 +144,9 @@ $('#f-master').addEventListener('change', (e) => {
   $('#f-master-other-wrap').hidden = !other;
   $('#f-master-other').required = other;
   if (other) $('#f-master-other').focus();
+  // Номер смены — по привязке мастера (можно поменять вручную, например при подмене).
+  const bound = SETTINGS().masters.find((m) => m.name === e.target.value)?.number;
+  if (bound && SETTINGS().shiftNumbers.includes(bound)) $('#f-number').value = bound;
 });
 
 $('#f-type').addEventListener('click', (e) => {
@@ -162,17 +180,71 @@ function showMainScreen() {
   $('#screen-start').hidden = true;
   $('#screen-main').hidden = false;
   document.body.classList.toggle('is-viewer', state.viewer);
-  $('#btn-end-shift').innerHTML = state.viewer ? 'Выйти из<br>просмотра' : 'Закончить<br>смену';
+  $('#btn-end-shift').textContent = state.viewer ? 'Выйти из просмотра' : 'Закончить смену';
   renderShiftInfo();
+  renderSaveStatus();
   renderNav();
   renderTab();
 }
 
+let lastMinute = -1;
 function tickClock() {
   const d = new Date();
   $('#clock-time').textContent = fmtTime(d);
   $('#clock-date').textContent = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
   $('#clock-weekday').textContent = WEEKDAYS[d.getDay()];
+  $('#start-time').textContent = fmtTime(d);
+  $('#start-date').textContent = `${d.getDate()} ${MONTHS[d.getMonth()]}, ${WEEKDAYS[d.getDay()]}`;
+  if (d.getMinutes() !== lastMinute) {
+    lastMinute = d.getMinutes();
+    refreshTimers();
+    applyTheme(); // в 20:00 и 08:00 тема «Авто» переключается сама
+  }
+}
+
+// Таймеры простоя обновляются на месте, без перерисовки вкладки (работает и при открытом окне).
+// data-since — начало остановки; data-shift-downtime — простой за текущую смену.
+function refreshTimers() {
+  if (!DB.data) return;
+  document.querySelectorAll('[data-since]').forEach((el) => {
+    el.textContent = fmtDuration(Date.now() - new Date(el.dataset.since));
+  });
+  const shift = DB.data.currentShift;
+  if (shift) {
+    const total = fmtDuration(shiftBreakdowns(shift, new Date()).downtime);
+    document.querySelectorAll('[data-shift-downtime]').forEach((el) => { el.textContent = total; });
+  }
+  // «осталось …» у идущей смены в истории
+  document.querySelectorAll('[data-shift-left]').forEach((el) => { el.textContent = shiftLeftText(new Date(el.dataset.shiftLeft)); });
+  refreshShiftProgress();
+  refreshStartScreen();
+}
+
+// «04:12», «вчера 22:40» или «05.10 14:03» — без полной даты для недавних событий.
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return fmtTime(d);
+  if (diff === 1) return `вчера ${fmtTime(d)}`;
+  return `${fmtDate(d).slice(0, 5)} ${fmtTime(d)}`;
+}
+
+// Индикатор сохранения. Сейчас данные только локальные: «сохранено» или «не сохранено».
+// Состояния будущей синхронизации с OneDrive уже предусмотрены.
+const SAVE_LABELS = {
+  saved:   (s) => (s.at ? `Сохранено · ${fmtWhen(s.at)}` : 'Сохранено'),
+  syncing: () => 'Синхронизация…',
+  offline: (s) => `Офлайн, ${s.pending} ${plural(s.pending, 'изменение', 'изменения', 'изменений')}`,
+  error:   () => 'Не сохранено',
+};
+function renderSaveStatus() {
+  const s = DB.saveState;
+  const el = $('#save-status');
+  el.className = `save-status save-status--${s.state}`;
+  el.textContent = SAVE_LABELS[s.state](s);
+  el.title = s.state === 'error' ? 'Последнее изменение не удалось записать в память устройства' : 'Все изменения записаны на этом устройстве';
 }
 
 function renderShiftInfo() {
@@ -182,14 +254,34 @@ function renderShiftInfo() {
     $('#shift-info').innerHTML = `${viewerTag}<div class="info__type">Смена не начата</div>`;
     return;
   }
-  const { master, type } = shift;
-  const start = new Date(shift.start);
-  const end = shift.plannedEnd ? new Date(shift.plannedEnd) : plannedEnd(type, start);
+  const { master } = shift;
+  const { start, end } = shiftBounds(shift);
+  // Дату не повторяем — она есть в часах слева.
   $('#shift-info').innerHTML = `
     ${viewerTag}
     <div class="info__type">${shiftTitle(shift)}</div>
-    <div class="info__row">Мастер: <b>${escapeHtml(master)}</b></div>
-    <div class="info__row">${fmtDate(start)} ${fmtTime(start)} — ${fmtDate(end)} ${fmtTime(end)}</div>`;
+    <div class="info__row">Мастер: <b>${escapeHtml(master)}</b> · ${fmtTime(start)}–${fmtTime(end)}</div>
+    <div class="info__progress" aria-hidden="true"><span class="info__bar" id="shift-bar"></span></div>
+    <div class="info__left" id="shift-left"></div>`;
+  refreshShiftProgress();
+}
+
+const shiftBounds = (shift) => {
+  const start = new Date(shift.start);
+  return { start, end: shift.plannedEnd ? new Date(shift.plannedEnd) : plannedEnd(shift.type, start) };
+};
+
+// Полоса прогресса смены и «осталось …» / «сверх плана …». Обновляется раз в минуту вместе с таймерами.
+function refreshShiftProgress() {
+  const shift = DB.data.currentShift;
+  const bar = $('#shift-bar'), left = $('#shift-left');
+  if (!shift || !bar) return;
+  const { start, end } = shiftBounds(shift);
+  const now = Date.now();
+  const over = now > end;
+  bar.style.width = `${over ? 100 : Math.max(0, Math.min(100, ((now - start) / (end - start)) * 100))}%`;
+  left.classList.toggle('is-over', over);
+  left.textContent = over ? `сверх плана ${fmtDuration(now - end)}` : `осталось ${fmtDuration(end - now)}`;
 }
 
 // «Дневная смена № 2»
@@ -199,35 +291,56 @@ const shiftTitle = (sh) =>
 // Обычные вкладки + вкладки режима настроек.
 const visibleTabs = () => (state.admin ? [...CONFIG.tabs, ...CONFIG.adminTabs] : CONFIG.tabs);
 
+const ALERT_TITLES = {
+  current: (n) => `${n} ${plural(n, 'станок стоит', 'станка стоят', 'станков стоят')}`,
+  repair: (n) => `${n} ${plural(n, 'открытая заявка', 'открытые заявки', 'открытых заявок')} на ремонт`,
+  warehouse: (n) => `${n} ${plural(n, 'позиция', 'позиции', 'позиций')} ниже минимального остатка`,
+};
+
 function renderNav() {
   const badges = getBadges();
   $('#nav-tabs').innerHTML = visibleTabs()
-    .map((t) => `
-      <button class="tab${t.id === state.tab ? ' is-active' : ''}${CONFIG.adminTabs.includes(t) ? ' tab--admin' : ''}" data-tab="${t.id}" title="${t.label}">
+    .map((t) => {
+      const badge = badges[t.id];
+      const cls = `tab${t.id === state.tab ? ' is-active' : ''}${CONFIG.adminTabs.includes(t) ? ' tab--admin' : ''}`;
+      const title = badge ? `${t.title}: ${ALERT_TITLES[t.id](badge.count)}` : t.title;
+      return `
+      <button class="${cls}" data-tab="${t.id}" title="${title}">
         <span class="tab__icon">${ICONS[t.icon]}</span>
         <span class="tab__label">${t.label}</span>
-        ${badges[t.id] ? `<span class="badge badge--${badges[t.id]}">!</span>` : ''}
-      </button>`)
+        ${badge ? `<span class="tab__badge tab__badge--${badge.tone}">${badge.count}</span>` : ''}
+      </button>`;
+    })
     .join('');
 }
 
-// Уведомления на вкладках: red — есть заявки на ремонт, yellow — запчасти ниже минимума.
+// Счётчики на вкладках. Красный — только стоящие станки (авария); жёлтый — требует внимания:
+// открытые заявки на ремонт и запчасти ниже минимума.
 function getBadges() {
   const { repairs, parts } = DB.data;
+  const down = openBreakdowns().size;
+  const open = repairs.filter((r) => r.status !== 'done').length;
+  const low = parts.filter(isLow).length;
   return {
-    repair: repairs.some((r) => r.status !== 'done') ? 'red' : null,
-    warehouse: parts.some((p) => p.qty < p.min) ? 'yellow' : null,
+    current: down ? { tone: 'red', count: down } : null,
+    repair: open ? { tone: 'yellow', count: open } : null,
+    warehouse: low ? { tone: 'yellow', count: low } : null,
   };
+}
+
+// Переход на вкладку (из меню или по ссылке внутри панели).
+function goTab(id) {
+  state.tab = id;
+  state.editing = false;
+  store.set('tab', state.tab);
+  renderNav();
+  renderTab();
 }
 
 $('#nav-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-tab]');
   if (!btn) return;
-  state.tab = btn.dataset.tab;
-  state.editing = false;
-  store.set('tab', state.tab);
-  renderNav();
-  renderTab();
+  goTab(btn.dataset.tab);
 });
 
 // Заглушки содержимого вкладок — наполним на следующих шагах.
@@ -241,10 +354,9 @@ const TAB_STUBS = {
 };
 
 const FAB_TITLES = {
-  current: 'Добавить поломку',
-  repair: 'Добавить на ремонт',
-  warehouse: 'Добавить запчасти',
-  manuals: 'Поиск решения по ошибке',
+  current: 'Записать остановку станка',
+  repair: 'Новая заявка на ремонт',
+  warehouse: 'Добавить запчасть на склад',
 };
 
 // Что можно менять во вкладке в режиме настроек.
@@ -266,22 +378,24 @@ function renderTab() {
       <p>${TAB_STUBS[tab.id]}</p>
       <p class="muted">Раздел в разработке</p>
     </div>`;
+  // На «Смене» заголовок не нужен: он дублирует вкладку и шапку.
   $('#panel').innerHTML = `
-    <h2 class="panel__title">${tab.label}</h2>
-    ${editing ? `<div class="panel__admin">Редактирование: ${EDIT_HINTS[tab.id]}</div>` : ''}
+    ${tab.id === 'current' ? '' : `<h2 class="panel__title">${tab.title}</h2>`}
+    ${state.admin ? `<div class="panel__admin">Режим настроек${editing ? ` · ${EDIT_HINTS[tab.id]}` : ''}</div>` : ''}
     ${body}`;
 
   const fab = $('#fab');
-  fab.hidden = !tab.fab;
+  // Склад пополняется только в режиме настроек.
+  fab.hidden = !tab.fab || (tab.id === 'warehouse' && !state.admin);
   if (tab.fab) {
-    fab.innerHTML = ICONS[tab.fab];
+    fab.innerHTML = `<span class="fab__icon">${ICONS.add}</span><span class="fab__label">${tab.fab}</span>`;
     fab.title = FAB_TITLES[tab.id];
   }
 
   const edit = $('#btn-edit');
-  edit.hidden = !state.admin || tab.id === 'shifts';
+  edit.hidden = !state.admin || tab.id === 'shifts' || tab.id === 'manuals';
   edit.classList.toggle('is-active', editing);
-  edit.querySelector('.edit-btn__label').textContent = editing ? 'Готово' : 'Редактировать';
+  edit.querySelector('.edit-btn__label').textContent = edit.title = editing ? 'Готово' : 'Редактировать';
 }
 
 $('#btn-edit').addEventListener('click', () => {
@@ -292,9 +406,12 @@ $('#btn-edit').addEventListener('click', () => {
 });
 
 // ================= Перечень оборудования =================
-// Запись: { id, group, name, mark, inv }
+// Запись: { id, group, name, mark, inv, pos }
 const getEquipment = () => DB.data.equipment;
-const getGroups = () => [...new Set(getEquipment().map((e) => e.group))].sort((a, b) => a.localeCompare(b, 'ru'));
+// Группы — в порядке внесения в перечень (так, как их заводили на производстве), везде одинаково.
+const getGroups = () => [...new Set(getEquipment().map((e) => e.group))];
+// Станки внутри группы: по позиции в цеху (без позиции — в конце), затем по имени («№2» раньше «№10»).
+const byPos = (a, b) => (a.pos ?? Infinity) - (b.pos ?? Infinity) || a.name.localeCompare(b.name, 'ru', { numeric: true });
 
 function equipmentView() {
   const list = getEquipment();
@@ -322,18 +439,20 @@ function equipmentView() {
   // Внутри подгруппы: сначала то, что в ремонте, потом самые проблемные.
   const order = (a, b) => {
     const sa = stats.get(a.id), sb = stats.get(b.id);
-    return (sb.inRepair ? 1 : 0) - (sa.inRepair ? 1 : 0) || sb.downtime - sa.downtime || a.name.localeCompare(b.name, 'ru');
+    return (sb.inRepair ? 1 : 0) - (sa.inRepair ? 1 : 0) || sb.downtime - sa.downtime || byPos(a, b);
   };
 
+  // Заголовки колонок — первой строкой в карточке каждой группы.
   const head = `
     <div class="eq-head">
       <span>Оборудование</span><span>Состояние</span><span>Поломок</span><span>Простой</span><span>Последняя</span><span></span>
     </div>`;
 
-  return periodSwitch() + tiles + head + getGroups().map((g) => `
+  return periodSwitch() + tiles + getGroups().map((g) => `
     <section class="eq-group">
       <h3 class="eq-group__title">${escapeHtml(g)}</h3>
       <div class="eq-rows">
+        ${head}
         ${list.filter((e) => e.group === g).sort(order).map((e) => equipmentRow(e, stats.get(e.id))).join('')}
       </div>
     </section>`).join('');
@@ -458,7 +577,7 @@ function equipmentDetails(eq, s) {
 
 const TAB_VIEWS = {
   equipment: equipmentView, current: currentShiftView, history: historyView,
-  repair: repairView, shifts: shiftsSettingsView,
+  repair: repairView, warehouse: warehouseView, manuals: manualsView, shifts: shiftsSettingsView,
 };
 
 // ================= История смен =================
@@ -485,6 +604,8 @@ function shiftBreakdowns(shift, end) {
   return { own, carried, downtime };
 }
 
+// Смена — один блок: шапка (тип, дата, номер, мастер, время, сводка) и строки поломок.
+// Текущая и предыдущая смены раскрыты, остальные свёрнуты до шапки; пустые не сворачиваются.
 function historyView() {
   const cur = DB.data.currentShift;
   const shifts = [...DB.data.shifts].sort((a, b) => b.start.localeCompare(a.start));
@@ -497,65 +618,125 @@ function historyView() {
       </div>`;
   }
 
-  const shown = shifts.slice(0, state.historyLimit);
-  let lastDay = '';
-  const html = shown.map((sh) => {
-    const start = new Date(sh.start);
-    const day = `${start.getDate()} ${MONTHS[start.getMonth()]} ${start.getFullYear()}, ${WEEKDAYS[start.getDay()]}`;
-    const dayHead = day !== lastDay ? `<h3 class="eq-group__title hist-day">${day}</h3>` : '';
-    lastDay = day;
-    return dayHead + shiftCard(sh);
-  }).join('');
+  // По умолчанию раскрываем две последние смены — один раз, дальше решает пользователь.
+  for (const sh of shifts.slice(0, 2)) {
+    if (state.histSeeded.has(sh.id)) continue;
+    state.histSeeded.add(sh.id);
+    state.histOpen.add(sh.id);
+  }
 
+  const shown = shifts.slice(0, state.historyLimit);
   const more = shifts.length > shown.length
     ? `<button class="btn hist-more" data-more>Показать ещё (${shifts.length - shown.length})</button>`
     : '';
-  return html + more;
+  return shown.map(shiftCard).join('') + more;
 }
+
+const WEEKDAYS_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+
+// «вт 6 окт»; через полночь — «вт 6 → ср 7 окт» (в разных месяцах — «пт 31 окт → сб 1 ноя»).
+function shiftDays(start, end) {
+  const day = (d) => `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`;
+  const mon = (d) => MONTHS_SHORT[d.getMonth()];
+  if (start.toDateString() === end.toDateString()) return `${day(start)} ${mon(start)}`;
+  if (start.getMonth() === end.getMonth()) return `${day(start)} → ${day(end)} ${mon(end)}`;
+  return `${day(start)} ${mon(start)} → ${day(end)} ${mon(end)}`;
+}
+
+// Плановый конец смены; у старых записей без plannedEnd — по расписанию.
+const shiftPlannedEnd = (sh) => (sh.plannedEnd ? new Date(sh.plannedEnd) : plannedEnd(sh.type, new Date(sh.start)));
+
+// Конец смены в шапке: «08:15 (+15 мин)» — переработка, «07:30 (−30 мин)» — раньше плана;
+// у идущей — плановый конец и «осталось …» (обновляется в refreshTimers).
+function shiftEndHtml(sh) {
+  const plan = shiftPlannedEnd(sh);
+  if (sh.current) {
+    return `${fmtTime(plan)} <span class="hist-head__left" data-shift-left="${plan.toISOString()}">${shiftLeftText(plan)}</span>`;
+  }
+  const end = new Date(sh.end);
+  const diff = end - plan;
+  const note = Math.abs(diff) <= 5 * 60000 ? ''
+    : diff > 0 ? ` <span class="hist-over">(+${fmtDuration(diff)})</span>`
+    : ` <span class="muted">(−${fmtDuration(-diff)})</span>`;
+  return `${fmtTime(end)}${note}`;
+}
+const shiftLeftText = (plan) => {
+  const left = plan - Date.now();
+  return left >= 0 ? `· осталось ${fmtDuration(left)}` : `· сверх плана ${fmtDuration(-left)}`;
+};
 
 function shiftCard(sh) {
   const start = new Date(sh.start);
   const end = sh.current ? new Date() : new Date(sh.end);
   const { own, carried, downtime } = shiftBreakdowns(sh, end);
-  const rows = (list, withDate) => list.map((b) => withTrash(breakdownRow(b, withDate), b)).join('');
+  const empty = !own.length && !carried.length;
+  const open = !empty && state.histOpen.has(sh.id);
+  const inRepair = [...own, ...carried].filter((b) => b.status === 'repair').length;
+  const night = sh.type === 'night';
 
+  const title = `
+    <span class="hist-head__title">
+      <span class="hist-head__icon" aria-hidden="true">${ICONS[night ? 'moon' : 'sun']}</span>
+      <span>${escapeHtml(SETTINGS().shiftTypes[sh.type]?.label || '')} смена · ${shiftDays(start, sh.current ? shiftPlannedEnd(sh) : end)}</span>
+    </span>`;
+  const meta = `
+    <span class="hist-head__meta">
+      ${sh.number ? `<span class="muted">Смена №</span> ${escapeHtml(sh.number)} <span class="muted">·</span> ` : ''}${escapeHtml(sh.master)}
+      <span class="muted">·</span> <span class="tnum">${fmtTime(start)}–${shiftEndHtml(sh)}</span>
+    </span>`;
+  const summary = empty
+    ? '<span class="hist-head__sum muted">Поломок не было</span>'
+    : `<span class="hist-head__sum">
+        ${own.length ? `<b>${own.length}</b> ${plural(own.length, 'поломка', 'поломки', 'поломок')}` : 'Своих поломок нет'}
+        ${carried.length ? ` · ↪ <b>${carried.length}</b> с прошлых смен` : ''} · простой <b class="tnum"${sh.current ? ' data-shift-downtime' : ''}>${fmtDuration(downtime)}</b>
+        <span class="hist-head__note" title="Простой всех станков за смену складывается: два станка стоят по 6 ч — это 12 ч простоя">сумма по станкам</span>
+        ${inRepair ? `<span class="hist-head__repair">· <b>${inRepair}</b> в ремонте</span>` : ''}
+      </span>`;
+  const aside = `
+    <span class="hist-head__aside">
+      ${sh.current ? '<span class="hist-now">идёт сейчас</span>' : ''}
+      ${empty ? '' : `<span class="hist-head__chev">${ICONS.chevron}</span>`}
+    </span>`;
+  const head = empty
+    ? `<div class="hist-head">${title}${aside}${meta}${summary}</div>`
+    : `<button class="hist-head" data-hist="${sh.id}" aria-expanded="${open}">${title}${aside}${meta}${summary}</button>`;
+
+  const rows = (list, isCarried) => list.map((b) => withTrash(breakdownRow(b, isCarried), b)).join('');
   return `
-    <section class="hist-shift${sh.current ? ' hist-shift--current' : ''}">
-      <header class="hist-shift__head">
-        <div>
-          <div class="hist-shift__title">${shiftTitle(sh)}${sh.current ? ' <span class="hist-now">идёт сейчас</span>' : ''}</div>
-          <div class="hist-shift__sub">
-            ${fmtTime(start)} — ${sh.current ? '…' : `${fmtDate(end) !== fmtDate(start) ? `${fmtDate(end)} ` : ''}${fmtTime(end)}`}
-            · Мастер: <b>${escapeHtml(sh.master)}</b>
-          </div>
-        </div>
-        <div class="hist-shift__nums">
-          <span><b>${own.length}</b> ${plural(own.length, 'поломка', 'поломки', 'поломок')}</span>
-          <span><b>${fmtDuration(downtime)}</b> простоя</span>
-        </div>
-      </header>
-      ${own.length || carried.length ? '' : '<p class="muted hist-empty">Поломок не было.</p>'}
-      ${own.length ? `<div class="hist-rows">${rows(own)}</div>` : ''}
-      ${carried.length ? `
-        <div class="hist-carried">Переходящие с прошлых смен · ${carried.length}</div>
+    <section class="hist-shift${sh.current ? ' hist-shift--current' : ''}${empty ? ' hist-shift--empty' : ''}${open ? ' is-open' : ''}">
+      ${head}
+      ${open && own.length ? `<div class="hist-rows">${rows(own, false)}</div>` : ''}
+      ${open && carried.length ? `
+        <div class="hist-carried">↪ Перешли с прошлых смен · ${carried.length}</div>
         <div class="hist-rows">${rows(carried, true)}</div>` : ''}
     </section>`;
 }
 
-// Компактная строка поломки; нажатие открывает полную информацию.
-function breakdownRow(b, withDate = false) {
-  const eq = DB.data.equipment.find((e) => e.id === b.equipmentId);
+// Строка поломки: время | станок и причина | длительность (и «В ремонте» только у незакрытых).
+// carried — поломка из прошлой смены: время с датой и пометка, из какой она смены.
+function breakdownRow(b, carried = false) {
   const done = b.status === 'done';
   const dur = fmtDuration((done ? new Date(b.end) : new Date()) - new Date(b.start));
+  let from = '';
+  if (carried) {
+    const own = DB.data.shifts.find((s) => s.id === b.shiftId);
+    from = own
+      ? `от смены${own.number ? ` № ${escapeHtml(own.number)}` : ''} · ${escapeHtml(own.master)}`
+      : `от смены · ${escapeHtml(b.master)}`;
+  }
   return `
-    <button class="hist-row hist-row--${b.status}" data-bd="${b.id}">
-      <span class="hist-row__time">${withDate ? `<small>${fmtDate(new Date(b.start)).slice(0, 5)}</small>` : ''}${fmtTime(new Date(b.start))}</span>
+    <button class="hist-row hist-row--${b.status}${carried ? ' hist-row--carried' : ''}" data-bd="${b.id}">
+      <span class="hist-row__time">${carried ? `<small>${fmtDate(new Date(b.start)).slice(0, 5)}</small>` : ''}${fmtTime(new Date(b.start))}</span>
       <span class="hist-row__main">
-        <span class="bd-item__name">${escapeHtml(equipmentName(b.equipmentId))}${eq?.mark ? ` <span class="bd-item__mark">${escapeHtml(eq.mark)}</span>` : ''}</span>
-        <span class="hist-row__reason">${escapeHtml(b.reason)}</span>
+        <span class="hist-row__name">${escapeHtml(equipmentName(b.equipmentId))}</span>
+        <span class="hist-row__reason">${escapeHtml(b.reason)} <span class="muted">· ${escapeHtml(b.type)}</span></span>
+        ${from ? `<span class="hist-row__from">${from}</span>` : ''}
       </span>
-      <span class="hist-row__info"><span class="hist-row__type">${escapeHtml(b.type)}</span><span class="hist-row__dur">${dur}</span></span>
-      <span class="bd-status bd-status--${b.status}">${done ? 'Отремонтировано' : 'В ремонте'}</span>
+      <span class="hist-row__side">
+        <span class="hist-row__dur"${done ? '' : ` data-since="${b.start}"`}>${dur}</span>
+        ${done ? '' : '<span class="bd-status bd-status--repair">В ремонте</span>'}
+      </span>
     </button>`;
 }
 
@@ -563,31 +744,60 @@ function breakdownRow(b, withDate = false) {
 // Изменения сохраняются сразу. Уже записанные смены и поломки не меняются:
 // в них остаются те фамилии и время, что были на момент записи.
 
-const LIST_SETTINGS = {
-  masters:      { title: 'Мастера', placeholder: 'Фамилия мастера', item: 'мастер' },
-  shiftNumbers: { title: 'Номера смен', placeholder: 'Например: 5', item: 'номер' },
-};
+// Мастера — пары { name, number }; номера смен — строки.
+// Переименование номера переносится в привязки мастеров, удаление — снимает привязку.
+
+function numberSelect(attrs, value) {
+  const nums = SETTINGS().shiftNumbers;
+  return `
+    <select class="set-num" ${attrs} aria-label="Номер смены">
+      <option value="">без №</option>
+      ${nums.map((n) => `<option value="${escapeHtml(n)}"${n === value ? ' selected' : ''}>№ ${escapeHtml(n)}</option>`).join('')}
+    </select>`;
+}
 
 function shiftsSettingsView() {
   const s = SETTINGS();
-  const listBlock = (key) => {
-    const cfg = LIST_SETTINGS[key];
-    return `
-      <section class="set-block">
-        <h3 class="eq-group__title">${cfg.title} · ${s[key].length}</h3>
-        <div class="set-list">
-          ${s[key].map((v, i) => `
-            <div class="set-item">
-              <input value="${escapeHtml(v)}" data-list="${key}" data-idx="${i}" aria-label="${cfg.title}">
-              <button class="trash trash--sm" data-list-del="${key}" data-idx="${i}" title="Удалить" aria-label="Удалить">${ICONS.trash}</button>
-            </div>`).join('') || `<p class="muted">Список пуст.</p>`}
-        </div>
-        <div class="set-add">
-          <input placeholder="${cfg.placeholder}" data-list-new="${key}" autocomplete="off">
-          <button class="btn btn--primary" data-list-add="${key}">Добавить</button>
-        </div>
-      </section>`;
-  };
+  const trash = (key, i) =>
+    `<button class="trash trash--sm" data-list-del="${key}" data-idx="${i}" title="Удалить" aria-label="Удалить">${ICONS.trash}</button>`;
+
+  const masters = `
+    <section class="set-block">
+      <h3 class="eq-group__title">Мастера · ${s.masters.length}</h3>
+      <div class="set-list">
+        ${s.masters.map((m, i) => `
+          <div class="set-item">
+            <input value="${escapeHtml(m.name)}" data-master-name="${i}" aria-label="Фамилия мастера">
+            ${numberSelect(`data-master-number="${i}"`, m.number)}
+            ${trash('masters', i)}
+          </div>`).join('') || '<p class="muted">Список пуст.</p>'}
+      </div>
+      <div class="set-add">
+        <input placeholder="Фамилия мастера" data-list-new="masters" autocomplete="off">
+        ${numberSelect('id="new-master-number"', '')}
+        <button class="btn btn--primary" data-list-add="masters">Добавить</button>
+      </div>
+    </section>`;
+
+  const numbers = `
+    <section class="set-block">
+      <h3 class="eq-group__title">Номера смен · ${s.shiftNumbers.length}</h3>
+      <div class="set-list">
+        ${s.shiftNumbers.map((n, i) => {
+          const who = s.masters.filter((m) => m.number === n).map((m) => m.name);
+          return `
+          <div class="set-item">
+            <input value="${escapeHtml(n)}" data-number="${i}" aria-label="Номер смены">
+            <span class="set-who">${who.length ? escapeHtml(who.join(', ')) : 'нет мастера'}</span>
+            ${trash('shiftNumbers', i)}
+          </div>`;
+        }).join('') || '<p class="muted">Список пуст.</p>'}
+      </div>
+      <div class="set-add">
+        <input placeholder="Например: 5" data-list-new="shiftNumbers" autocomplete="off">
+        <button class="btn btn--primary" data-list-add="shiftNumbers">Добавить</button>
+      </div>
+    </section>`;
 
   const times = Object.entries(s.shiftTypes).map(([id, t]) => {
     const start = atTime(new Date(), t.start);
@@ -604,8 +814,8 @@ function shiftsSettingsView() {
   return `
     <p class="muted set-note">Изменения сохраняются сразу. Уже записанные смены и поломки не меняются.</p>
     <div class="set-grid">
-      ${listBlock('masters')}
-      ${listBlock('shiftNumbers')}
+      ${masters}
+      ${numbers}
     </div>
     <section class="set-block">
       <h3 class="eq-group__title">Время смен</h3>
@@ -614,17 +824,24 @@ function shiftsSettingsView() {
     </section>`;
 }
 
+const masterNames = () => SETTINGS().masters.map((m) => m.name);
+
 function addListItem(key) {
   const input = document.querySelector(`[data-list-new="${key}"]`);
   const v = input.value.trim();
   if (!v) return input.focus();
-  if (SETTINGS()[key].includes(v)) {
+  const taken = key === 'masters' ? masterNames() : SETTINGS().shiftNumbers;
+  if (taken.includes(v)) {
     input.setCustomValidity('Уже есть в списке');
     input.reportValidity();
     setTimeout(() => input.setCustomValidity(''), 1500);
     return;
   }
-  DB.update((d) => { d.settings[key].push(v); });
+  const number = key === 'masters' ? $('#new-master-number').value : '';
+  DB.update((d) => {
+    if (key === 'masters') d.settings.masters.push({ name: v, number });
+    else d.settings.shiftNumbers.push(v);
+  });
   document.querySelector(`[data-list-new="${key}"]`)?.focus();
 }
 
@@ -632,7 +849,13 @@ $('#panel').addEventListener('click', (e) => {
   const add = e.target.closest('[data-list-add]');
   if (add) return addListItem(add.dataset.listAdd);
   const del = e.target.closest('[data-list-del]');
-  if (del) DB.update((d) => { d.settings[del.dataset.listDel].splice(Number(del.dataset.idx), 1); });
+  if (!del) return;
+  const key = del.dataset.listDel, idx = Number(del.dataset.idx);
+  DB.update((d) => {
+    const [removed] = d.settings[key].splice(idx, 1);
+    // Удалили номер — мастера с ним остаются без номера.
+    if (key === 'shiftNumbers') d.settings.masters.forEach((m) => { if (m.number === removed) m.number = ''; });
+  });
 });
 
 $('#panel').addEventListener('keydown', (e) => {
@@ -641,12 +864,25 @@ $('#panel').addEventListener('keydown', (e) => {
 
 $('#panel').addEventListener('change', (e) => {
   const el = e.target;
-  if (el.dataset.list) {
-    const v = el.value.trim();
-    const list = SETTINGS()[el.dataset.list];
-    const idx = Number(el.dataset.idx);
-    if (!v || list.some((x, i) => x === v && i !== idx)) { el.value = list[idx]; return; } // пусто или дубль — откат
-    DB.update((d) => { d.settings[el.dataset.list][idx] = v; });
+  // Пустое значение или дубль — откатываем поле.
+  if (el.dataset.masterName !== undefined) {
+    const idx = Number(el.dataset.masterName), v = el.value.trim();
+    const names = masterNames();
+    if (!v || names.some((x, i) => x === v && i !== idx)) { el.value = names[idx]; return; }
+    DB.update((d) => { d.settings.masters[idx].name = v; });
+  }
+  if (el.dataset.masterNumber !== undefined) {
+    DB.update((d) => { d.settings.masters[Number(el.dataset.masterNumber)].number = el.value; });
+  }
+  if (el.dataset.number !== undefined) {
+    const idx = Number(el.dataset.number), v = el.value.trim();
+    const nums = SETTINGS().shiftNumbers;
+    if (!v || nums.some((x, i) => x === v && i !== idx)) { el.value = nums[idx]; return; }
+    DB.update((d) => {
+      const old = d.settings.shiftNumbers[idx];
+      d.settings.shiftNumbers[idx] = v;
+      d.settings.masters.forEach((m) => { if (m.number === old) m.number = v; });
+    });
   }
   if (el.dataset.time) {
     const type = SETTINGS().shiftTypes[el.dataset.time];
@@ -677,10 +913,25 @@ $('#panel').addEventListener('click', (e) => {
     return renderTab();
   }
 
+  // Шапка смены в истории — свернуть / раскрыть.
+  const hist = e.target.closest('[data-hist]');
+  if (hist) {
+    const id = hist.dataset.hist;
+    if (state.histOpen.has(id)) state.histOpen.delete(id); else state.histOpen.add(id);
+    return renderTab();
+  }
+
   const del = e.target.closest('[data-del]');
   if (del) {
     if (del.dataset.kind === 'repair') return confirmDeleteRepair(DB.data.repairs.find((x) => x.id === del.dataset.del));
+    if (del.dataset.kind === 'part') return confirmDeletePart(DB.data.parts.find((x) => x.id === del.dataset.del));
     return confirmDeleteBreakdown(DB.data.breakdowns.find((x) => x.id === del.dataset.del));
+  }
+
+  const part = e.target.closest('[data-part]');
+  if (part) {
+    const p = DB.data.parts.find((x) => x.id === part.dataset.part);
+    return state.admin ? openPartForm(p) : openPartInfo(p);
   }
 
   const rq = e.target.closest('[data-rq]');
@@ -688,6 +939,18 @@ $('#panel').addEventListener('click', (e) => {
 
   const bd = e.target.closest('[data-bd]');
   if (bd) return openBreakdownForm(DB.data.breakdowns.find((x) => x.id === bd.dataset.bd));
+
+  // Плитка станка: стоит — открываем его поломку, работает — форму новой остановки.
+  const machine = e.target.closest('[data-machine]');
+  if (machine) {
+    const open = machine.dataset.machineBd;
+    return open
+      ? openBreakdownForm(DB.data.breakdowns.find((x) => x.id === open))
+      : openBreakdownForm(null, machine.dataset.machine);
+  }
+
+  const go = e.target.closest('[data-goto]');
+  if (go) return goTab(go.dataset.goto);
 
   const period = e.target.closest('[data-period]');
   if (period) {
@@ -710,7 +973,7 @@ $('#panel').addEventListener('click', (e) => {
 // В режиме редактирования (режим настроек + «Редактировать») рядом с поломкой — корзина.
 function withTrash(html, item, kind = 'bd') {
   if (!(state.admin && state.editing)) return html;
-  const title = kind === 'repair' ? 'Удалить заявку' : 'Удалить поломку';
+  const title = { repair: 'Удалить заявку', part: 'Удалить запчасть' }[kind] || 'Удалить поломку';
   return `
     <div class="bd-wrap">
       ${html}
@@ -748,7 +1011,11 @@ function openEquipmentForm(eq = null) {
       <span class="field__label">Инвентарный номер</span>
       <input id="eq-inv" autocomplete="off" value="${eq ? escapeHtml(eq.inv) : ''}">
     </label>
-    <p class="error" id="eq-error" hidden></p>`, [
+    <label class="field">
+      <span class="field__label">Позиция в цеху</span>
+      <input id="eq-pos" type="number" inputmode="numeric" step="1" placeholder="Необязательно — порядок плиток внутри подгруппы" value="${eq?.pos ?? ''}">
+    </label>
+    <p class="error" id="eq-error" aria-live="polite" hidden></p>`, [
     { label: 'Отмена' },
     { label: 'Сохранить', primary: true, onClick: () => saveEquipment(eq) },
   ]);
@@ -764,14 +1031,15 @@ function saveEquipment(eq) {
   const val = (id) => $(id).value.trim();
   const sel = $('#eq-group').value;
   const group = sel === NEW_GROUP ? val('#eq-group-new') : sel;
-  const data = { group, name: val('#eq-name'), mark: val('#eq-mark'), inv: val('#eq-inv') };
+  const posRaw = val('#eq-pos');
+  const data = { group, name: val('#eq-name'), mark: val('#eq-mark'), inv: val('#eq-inv'), pos: posRaw === '' ? null : Number(posRaw) };
 
   const list = getEquipment();
-  const error = (msg) => { $('#eq-error').textContent = msg; $('#eq-error').hidden = false; return false; };
-  if (!data.group) return error('Укажите подгруппу.');
-  if (!data.name) return error('Укажите наименование оборудования.');
+  const error = (msg, field) => fieldError(field, msg, '#eq-error');
+  if (!data.group) return error('Укажите подгруппу.', sel === NEW_GROUP ? '#eq-group-new' : '#eq-group');
+  if (!data.name) return error('Укажите наименование оборудования.', '#eq-name');
   if (data.inv && list.some((x) => x.inv === data.inv && (!eq || x.id !== eq.id))) {
-    return error(`Инвентарный номер ${data.inv} уже есть в перечне.`);
+    return error(`Инвентарный номер ${data.inv} уже есть в перечне.`, '#eq-inv');
   }
 
   DB.update((d) => {
@@ -814,40 +1082,128 @@ function breakdownCard(b, clickable = true, showEq = true) {
         <span>${escapeHtml(b.type)}</span>
         <span>Остановка: <b>${fmtDateTime(b.start)}</b></span>
         ${done ? `<span>Окончание: <b>${fmtDateTime(b.end)}</b></span>` : ''}
-        <span>Простой: <b>${dur}</b></span>
+        <span>Простой: <b${done ? '' : ` data-since="${b.start}"`}>${dur}</b></span>
         <span>Мастер: <b>${escapeHtml(b.master)}</b></span>
         ${b.handovers?.length ? `<span>Передано сменам: <b>${b.handovers.length}</b></span>` : ''}
         ${done ? `<span>Отремонтировал: <b>${escapeHtml(b.repairedBy)}</b></span>` : ''}
       </span>
+      ${done ? usedLine(b.used) : ''}
     </${tag}>`;
 }
 
-// Текущая смена: всё, что ещё в ремонте (в том числе с прошлых смен), и поломки этой смены.
+// «＋ Остановка»: сначала выбор станка плитками (тот же порядок, что на «Смене»).
+// Стоящие станки видны, но выбрать их нельзя — по ним уже открыта поломка.
+function openMachinePicker() {
+  if (!getEquipment().length) return openBreakdownForm(); // там же подсказка, что перечень пуст
+  const open = openBreakdowns();
+  openModal('Какой станок остановился?', `
+    <div class="machines--pick">
+      ${machineGroups((e) => {
+        const down = open.has(e.id);
+        return `
+          <button type="button" class="machine${down ? ' machine--down' : ''}" data-pick="${e.id}"${down ? ' disabled' : ''}>
+            <span class="machine__name">${escapeHtml(e.name)}</span>
+            ${e.mark ? `<span class="machine__mark">${escapeHtml(e.mark)}</span>` : ''}
+            ${down ? '<span class="machine__reason"><span class="sym" aria-hidden="true">■</span> уже стоит</span>' : ''}
+          </button>`;
+      })}
+    </div>`, [{ label: 'Отмена' }], { wide: true });
+}
+
+$('#modal').addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-pick]');
+  if (pick && !pick.disabled) openBreakdownForm(null, pick.dataset.pick);
+});
+
+// Текущая смена: сетка станков, ниже — всё, что ещё в ремонте (в том числе с прошлых смен), и поломки этой смены.
 function currentShiftView() {
   const shiftId = DB.data.currentShift?.id;
   const all = DB.data.breakdowns;
   const inRepair = all.filter((b) => b.status === 'repair').sort((a, b) => a.start.localeCompare(b.start));
   const doneHere = all.filter((b) => b.status === 'done' && b.shiftId === shiftId).sort((a, b) => b.start.localeCompare(a.start));
 
-  if (!inRepair.length && !doneHere.length) {
-    return `
-      <div class="empty">
-        <div class="empty__icon">${ICONS.current}</div>
-        <p>Поломок нет — всё оборудование работает.</p>
-        <p class="muted">Чтобы отметить поломку, нажмите + внизу справа.</p>
-      </div>`;
-  }
   const section = (title, list) => list.length
     ? `<section class="bd-section"><h3 class="eq-group__title">${title} · ${list.length}</h3><div class="bd-list">${list.map((b) => withTrash(breakdownCard(b), b)).join('')}</div></section>`
     : '';
-  return section('В ремонте', inRepair) + section('Отремонтировано в эту смену', doneHere);
+  const list = inRepair.length || doneHere.length
+    ? section('В ремонте', inRepair) + section('Отремонтировано в эту смену', doneHere)
+    : '<p class="muted bd-none">Поломок в эту смену не было.</p>';
+  return machineGrid() + list;
+}
+
+// ---------- Сетка станков ----------
+// Станок стоит, если по нему есть поломка «в ремонте» (берём самую раннюю).
+
+function openBreakdowns() {
+  const map = new Map();
+  for (const b of DB.data.breakdowns) {
+    if (b.status !== 'repair') continue;
+    const cur = map.get(b.equipmentId);
+    if (!cur || b.start < cur.start) map.set(b.equipmentId, b);
+  }
+  return map;
+}
+
+function machineGrid() {
+  const list = getEquipment();
+  if (!list.length) {
+    return `
+      <div class="empty empty--inline">
+        <div class="empty__icon">${ICONS.equipment}</div>
+        <p>Оборудование ещё не добавлено — сетка станков появится, когда оно будет в перечне.</p>
+        <button class="btn" data-goto="equipment">Открыть «Оборудование»</button>
+      </div>`;
+  }
+  const open = openBreakdowns();
+  const down = list.filter((e) => open.has(e.id)).length;
+  const working = list.length - down;
+  const shift = DB.data.currentShift;
+  const downtime = shift ? fmtDuration(shiftBreakdowns(shift, new Date()).downtime) : null;
+
+  const summary = `
+    <p class="machines__summary">
+      <b>${working} из ${list.length}</b> ${plural(working, 'работает', 'работают', 'работают')}${down ? ` · <span class="machines__down">${down} ${plural(down, 'стоит', 'стоят', 'стоят')}</span>` : ''}
+      ${downtime ? ` · простой за смену <b data-shift-downtime>${downtime}</b>` : ''}
+    </p>`;
+
+  return `<div class="machines-wrap">${summary}${machineGroups((e) => machineTile(e, open.get(e.id)))}</div>`;
+}
+
+// Группы станков в общем порядке; tile(e) рисует плитку. Используется на «Смене» и в окне выбора станка.
+const machineGroups = (tile) => getGroups().map((g) => `
+  <section class="machines__group">
+    <h3 class="eq-group__title">${escapeHtml(g)}</h3>
+    <div class="machines">
+      ${getEquipment().filter((e) => e.group === g).sort(byPos).map(tile).join('')}
+    </div>
+  </section>`).join('');
+
+// Плитка станка. Работает — нейтральная, без подписи (норму не подписываем);
+// стоит — красная, с причиной и таймером простоя.
+function machineTile(e, bd) {
+  const mark = e.mark ? `<span class="machine__mark">${escapeHtml(e.mark)}</span>` : '';
+  if (!bd) {
+    return `
+      <button class="machine" data-machine="${e.id}" title="${escapeHtml(e.name)}: работает${state.viewer ? '' : '. Нажмите, чтобы записать остановку'}">
+        <span class="machine__name">${escapeHtml(e.name)}</span>
+        ${mark}
+      </button>`;
+  }
+  return `
+    <button class="machine machine--down" data-machine="${e.id}" data-machine-bd="${bd.id}" title="${escapeHtml(e.name)}: стоит с ${fmtWhen(bd.start)}">
+      <span class="machine__name">${escapeHtml(e.name)}</span>
+      ${mark}
+      <span class="machine__reason"><span class="sym" aria-hidden="true">■</span> ${escapeHtml(bd.reason)}</span>
+      <span class="machine__timer" data-since="${bd.start}">${fmtDuration(Date.now() - new Date(bd.start))}</span>
+    </button>`;
 }
 
 // Фамилии, которые уже вводили в «Кто закончил ремонт», — для подсказок.
 const knownRepairers = () =>
   [...new Set(DB.data.breakdowns.map((b) => b.repairedBy).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
 
-function openBreakdownForm(bd = null) {
+// eqId — станок выбран заранее (нажали плитку в сетке станков).
+function openBreakdownForm(bd = null, eqId = null) {
   const eqList = DB.data.equipment;
   if (!eqList.length) {
     openModal('Добавить поломку', '<p>В перечне ещё нет оборудования.</p><p class="muted">Сначала добавьте его во вкладке «Перечень оборудования» в режиме настроек.</p>', [
@@ -865,7 +1221,7 @@ function openBreakdownForm(bd = null) {
   }
 
   const groups = getGroups();
-  const curEq = bd && eqList.find((e) => e.id === bd.equipmentId);
+  const curEq = eqList.find((e) => e.id === (bd ? bd.equipmentId : eqId));
   const master = bd ? bd.master : DB.data.currentShift?.master || '';
   let status = bd ? bd.status : 'repair';
   let type = bd ? bd.type : '';
@@ -920,17 +1276,18 @@ function openBreakdownForm(bd = null) {
         <input id="bd-by" list="bd-by-list" autocomplete="off" placeholder="Фамилия" value="${bd && bd.repairedBy ? escapeHtml(bd.repairedBy) : ''}">
         <datalist id="bd-by-list">${knownRepairers().map((n) => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
       </label>
+      ${usedField(bd?.used || [])}
     </div>
     <div class="field">
       <span class="field__label">Остановка у мастера</span>
       <div class="field__auto">${escapeHtml(master) || '—'}</div>
     </div>
-    <p class="error" id="bd-error" hidden></p>`, actions, { fill: true });
+    <p class="error" id="bd-error" aria-live="polite" hidden></p>`, actions, { fill: true });
 
   const fillEquipment = () => {
     const g = $('#bd-group').value;
     const sel = $('#bd-eq');
-    const items = eqList.filter((e) => e.group === g).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    const items = eqList.filter((e) => e.group === g).sort(byPos);
     sel.innerHTML = '<option value="" disabled selected>Выберите оборудование</option>' + items
       .map((e) => `<option value="${e.id}"${curEq && curEq.id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}${e.mark ? ` · ${escapeHtml(e.mark)}` : ''}${e.inv ? ` (инв. ${escapeHtml(e.inv)})` : ''}</option>`)
       .join('');
@@ -960,26 +1317,31 @@ function openBreakdownForm(bd = null) {
 }
 
 function saveBreakdown(bd, { status, type }) {
-  const error = (msg) => { $('#bd-error').textContent = msg; $('#bd-error').hidden = false; return false; };
+  const error = (msg, field) => fieldError(field, msg, '#bd-error');
   const equipmentId = $('#bd-eq').value;
   const startVal = $('#bd-start').value;
   const reason = $('#bd-reason').value.trim();
 
-  if (!equipmentId) return error('Выберите оборудование.');
-  if (!startVal) return error('Укажите время начала остановки.');
-  if (!reason) return error('Опишите причину остановки.');
-  if (!type) return error('Выберите тип поломки.');
+  if (!equipmentId) return error('Выберите оборудование.', $('#bd-eq').disabled ? '#bd-group' : '#bd-eq');
+  if (!startVal) return error('Укажите время начала остановки.', '#bd-start');
+  if (!reason) return error('Опишите причину остановки.', '#bd-reason');
+  if (!type) return error('Выберите тип поломки.', '#bd-type');
 
   const start = new Date(startVal);
   let end = null;
   let repairedBy = '';
+  let used = [];
+  const oldUsed = bd?.used || [];
   if (status === 'done') {
     const endVal = $('#bd-end').value;
     repairedBy = $('#bd-by').value.trim();
-    if (!endVal) return error('Укажите время окончания ремонта.');
+    if (!endVal) return error('Укажите время окончания ремонта.', '#bd-end');
     end = new Date(endVal);
-    if (end < start) return error('Окончание ремонта не может быть раньше начала остановки.');
-    if (!repairedBy) return error('Укажите, кто закончил ремонт.');
+    if (end < start) return error('Окончание ремонта не может быть раньше начала остановки.', '#bd-end');
+    if (!repairedBy) return error('Укажите, кто закончил ремонт.', '#bd-by');
+    const res = readUsed($('#bd-done-fields [data-used-editor]'), oldUsed);
+    if (res.error) return error(res.error, '#bd-done-fields [data-used-editor]');
+    used = res.used;
   }
 
   const fields = {
@@ -987,9 +1349,11 @@ function saveBreakdown(bd, { status, type }) {
     start: start.toISOString(),
     end: end ? end.toISOString() : null,
     repairedBy,
+    used, // вернули в ремонт — запчасти возвращаются на склад
   };
 
   DB.update((d) => {
+    applyUsage(d, oldUsed, used);
     const found = bd && d.breakdowns.find((x) => x.id === bd.id);
     if (found) Object.assign(found, fields);
     else d.breakdowns.push({
@@ -1003,11 +1367,22 @@ function saveBreakdown(bd, { status, type }) {
 
 function confirmDeleteBreakdown(bd) {
   openModal('Удалить поломку?', `
-    <p>Запись о поломке <b>${escapeHtml(equipmentName(bd.equipmentId))}</b> от ${fmtDateTime(bd.start)} будет удалена без возможности восстановления.</p>`, [
+    <p>Запись о поломке <b>${escapeHtml(equipmentName(bd.equipmentId))}</b> от ${fmtDateTime(bd.start)} будет удалена без возможности восстановления.</p>
+    ${returnNote(bd.used)}`, [
     { label: 'Отмена' },
-    { label: 'Удалить', danger: true, onClick: () => DB.update((d) => { d.breakdowns = d.breakdowns.filter((x) => x.id !== bd.id); }) },
+    {
+      label: 'Удалить', danger: true,
+      onClick: () => DB.update((d) => {
+        applyUsage(d, bd.used || [], []);
+        d.breakdowns = d.breakdowns.filter((x) => x.id !== bd.id);
+      }),
+    },
   ]);
 }
+
+// При удалении записи списанные ею запчасти возвращаются на склад.
+const returnNote = (used = []) => (used.some((u) => u.partId)
+  ? '<p class="muted">Списанные по ней запчасти вернутся на склад.</p>' : '');
 
 // ================= Необходимый ремонт =================
 // Заявка: { id, equipmentId, type, description, author, createdAt, shiftId,
@@ -1015,7 +1390,7 @@ function confirmDeleteBreakdown(bd) {
 
 // Подсказки фамилий: мастера + все, кто уже фигурировал в записях.
 const knownPeople = () => [...new Set([
-  ...SETTINGS().masters,
+  ...masterNames(),
   ...DB.data.repairs.flatMap((r) => [r.author, r.doneBy]),
   ...DB.data.breakdowns.map((b) => b.repairedBy),
 ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
@@ -1029,7 +1404,8 @@ function repairCard(r, clickable = true) {
     <${tag} class="bd-item rq-item rq-item--${done ? 'done' : 'open'}"${clickable ? ` data-rq="${r.id}"` : ''}>
       <span class="bd-item__head">
         <span class="bd-item__name">${escapeHtml(equipmentName(r.equipmentId))}${eq?.mark ? ` <span class="bd-item__mark">${escapeHtml(eq.mark)}</span>` : ''}</span>
-        <span class="bd-status bd-status--${done ? 'done' : 'repair'}">${done ? 'Выполнено' : 'Ожидает'}</span>
+        ${!done && r.priority === 'urgent' ? '<span class="bd-status bd-status--urgent">▲ Срочно</span>' : ''}
+        <span class="bd-status bd-status--${done ? 'done' : 'wait'}">${done ? 'Выполнено' : 'Ожидает'}</span>
       </span>
       <span class="bd-item__reason">${escapeHtml(r.description)}</span>
       <span class="bd-item__meta">
@@ -1039,19 +1415,22 @@ function repairCard(r, clickable = true) {
         <span>${done ? 'Выполнена за' : 'Ожидает'}: <b>${waiting}</b></span>
         ${done ? `<span>Выполнил: <b>${escapeHtml(r.doneBy)}</b> ${fmtDateTime(r.doneAt)}</span>` : ''}
       </span>
+      ${done ? usedLine(r.used, r.usedNote) : ''}
     </${tag}>`;
 }
 
 function repairView() {
   const all = DB.data.repairs;
-  const open = all.filter((r) => r.status !== 'done').sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Срочные — первыми, внутри — от старых к новым.
+  const urgent = (r) => (r.priority === 'urgent' ? 0 : 1);
+  const open = all.filter((r) => r.status !== 'done').sort((a, b) => urgent(a) - urgent(b) || a.createdAt.localeCompare(b.createdAt));
   const done = all.filter((r) => r.status === 'done').sort((a, b) => b.doneAt.localeCompare(a.doneAt)).slice(0, 20);
   if (!all.length) {
     return `
       <div class="empty">
         <div class="empty__icon">${ICONS.repair}</div>
         <p>Заявок на ремонт нет.</p>
-        <p class="muted">Чтобы добавить заявку, нажмите + внизу справа.</p>
+        ${state.viewer ? '' : '<p class="muted">Чтобы добавить заявку, нажмите «Заявка» внизу справа.</p>'}
       </div>`;
   }
   const section = (title, list) => list.length
@@ -1079,20 +1458,139 @@ function openRepair(r) {
       <input id="rq-done-by" list="rq-people" autocomplete="off" placeholder="Фамилия">
       <datalist id="rq-people">${knownPeople().map((n) => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
     </label>
-    <p class="error" id="rq-error" hidden></p>`, [
+    ${usedField()}
+    <p class="error" id="rq-error" aria-live="polite" hidden></p>`, [
     { label: 'Закрыть' },
-    {
-      label: 'Выполнено',
-      primary: true,
-      onClick: () => {
-        const by = $('#rq-done-by').value.trim();
-        if (!by) { $('#rq-error').textContent = 'Укажите, кто выполнил ремонт.'; $('#rq-error').hidden = false; return false; }
-        DB.update((d) => {
-          Object.assign(d.repairs.find((x) => x.id === r.id), { status: 'done', doneBy: by, doneAt: new Date().toISOString() });
-        });
-      },
-    },
+    { label: 'Выполнено', primary: true, onClick: () => completeRepair(r) },
   ], { fill: true });
+}
+
+// Выполнение заявки: проверяем запчасти, списываем со склада, закрываем заявку — одним изменением.
+function completeRepair(r) {
+  const error = (msg, field) => fieldError(field, msg, '#rq-error');
+  const by = $('#rq-done-by').value.trim();
+  if (!by) return error('Укажите, кто выполнил ремонт.', '#rq-done-by');
+  const res = readUsed($('#modal-body [data-used-editor]'));
+  if (res.error) return error(res.error, '#modal-body [data-used-editor]');
+
+  DB.update((d) => {
+    applyUsage(d, [], res.used);
+    Object.assign(d.repairs.find((x) => x.id === r.id), {
+      status: 'done', doneBy: by, doneAt: new Date().toISOString(), used: res.used,
+    });
+  });
+}
+
+// ================= Использованные запчасти =================
+// Один блок для поломки, заявки и закрытия ремонта в конце смены.
+// Запись: { partId, name, article, qty, unit }; partId = null — «Другое», не со склада (не списывается).
+const USED_OTHER = '__other__';
+
+const usedField = (used = [], label = 'Использованные запчасти') => `
+  <div class="field">
+    <span class="field__label">${label}</span>
+    <div class="used-editor" data-used-editor>
+      <div class="used-list">${used.map(usedRow).join('')}</div>
+      <button type="button" class="btn used-add" data-used-add>+ Добавить запчасть</button>
+    </div>
+    <span class="used-hint">Запчасти со склада спишутся. Если нужной нет в списке — «Другое».</span>
+  </div>`;
+
+function usedRow(u = null) {
+  const parts = DB.data.parts;
+  const other = !!u && !u.partId;
+  const part = u?.partId ? parts.find((p) => p.id === u.partId) : null;
+  const groups = [...new Set(parts.map((p) => p.group))].sort(byRu);
+  const opts = groups.map((g) => `
+    <optgroup label="${escapeHtml(g)}">
+      ${parts.filter((p) => p.group === g).sort((a, b) => byRu(a.name, b.name)).map((p) => `
+        <option value="${p.id}"${part?.id === p.id ? ' selected' : ''}>${escapeHtml(p.name)}${p.article ? ` (${escapeHtml(p.article)})` : ''} — есть ${fmtQty(p.qty)} ${escapeHtml(p.unit)}</option>`).join('')}
+    </optgroup>`).join('');
+  const unit = u?.unit || CONFIG.units[0];
+  return `
+    <div class="used-row${other ? ' is-other' : ''}">
+      <select data-used-part aria-label="Запчасть">
+        <option value="" disabled${u ? '' : ' selected'}>Выберите запчасть</option>
+        ${opts}
+        <option value="${USED_OTHER}"${other ? ' selected' : ''}>Другое (нет в списке)…</option>
+      </select>
+      <input type="number" data-used-qty min="0" step="any" inputmode="decimal" placeholder="Кол-во" aria-label="Количество" value="${u ? u.qty : ''}">
+      <span class="used-unit" data-used-unit-label>${part ? escapeHtml(part.unit) : ''}</span>
+      <select class="used-unit-sel" data-used-unit aria-label="Единица">
+        ${CONFIG.units.map((x) => `<option${x === unit ? ' selected' : ''}>${x}</option>`).join('')}
+      </select>
+      <button type="button" class="trash trash--sm" data-used-del title="Убрать" aria-label="Убрать">${ICONS.trash}</button>
+      <input class="used-name" data-used-name autocomplete="off" placeholder="Название запчасти" value="${other ? escapeHtml(u.name) : ''}">
+    </div>`;
+}
+
+// Окно одно на всё приложение — обработчики блока вешаем один раз.
+$('#modal').addEventListener('click', (e) => {
+  const add = e.target.closest('[data-used-add]');
+  if (add) {
+    const list = add.closest('[data-used-editor]').querySelector('.used-list');
+    list.insertAdjacentHTML('beforeend', usedRow());
+    list.lastElementChild.querySelector('select').focus();
+  }
+  if (e.target.closest('[data-used-del]')) e.target.closest('.used-row').remove();
+});
+$('#modal').addEventListener('change', (e) => {
+  if (e.target.dataset.usedPart === undefined) return;
+  const row = e.target.closest('.used-row');
+  const other = e.target.value === USED_OTHER;
+  row.classList.toggle('is-other', other);
+  const part = DB.data.parts.find((p) => p.id === e.target.value);
+  row.querySelector('[data-used-unit-label]').textContent = part ? part.unit : '';
+  (other ? row.querySelector('[data-used-name]') : row.querySelector('[data-used-qty]')).focus();
+});
+
+// Считывает строки блока. oldUsed — что было списано этой записью раньше (при правке):
+// это количество «возвращается» перед проверкой остатка. reserved — уже занято другими строками
+// того же окна (несколько ремонтов закрываются разом).
+function readUsed(editor, oldUsed = [], reserved = []) {
+  const used = [];
+  if (!editor) return { used };
+  for (const row of editor.querySelectorAll('.used-row')) {
+    const sel = row.querySelector('[data-used-part]').value;
+    const qty = Number(row.querySelector('[data-used-qty]').value);
+    if (!sel) return { error: 'Выберите запчасть в каждой строке или уберите пустую строку.' };
+    if (sel === USED_OTHER) {
+      const name = row.querySelector('[data-used-name]').value.trim();
+      if (!name) return { error: 'Для «Другое» напишите название запчасти.' };
+      if (!(qty > 0)) return { error: `«${name}»: укажите количество больше нуля.` };
+      used.push({ partId: null, name, article: '', qty: roundQty(qty), unit: row.querySelector('[data-used-unit]').value });
+      continue;
+    }
+    const part = DB.data.parts.find((p) => p.id === sel);
+    if (!part) return { error: 'Запчасть удалена со склада — выберите другую.' };
+    if (!(qty > 0)) return { error: `«${part.name}»: укажите количество больше нуля.` };
+    const sum = (list) => list.filter((u) => u.partId === part.id).reduce((n, u) => n + u.qty, 0);
+    const available = roundQty(part.qty + sum(oldUsed) - sum(reserved));
+    if (sum(used) + qty > available) return { error: `«${part.name}»: на складе только ${fmtQty(available)} ${part.unit}.` };
+    used.push({ partId: part.id, name: part.name, article: part.article || '', qty: roundQty(qty), unit: part.unit });
+  }
+  return { used };
+}
+
+// Возвращает на склад прежнее списание и списывает новое. Вызывать внутри DB.update.
+function applyUsage(d, oldUsed = [], newUsed = []) {
+  const move = (list, sign) => list.forEach((u) => {
+    const p = u.partId && d.parts.find((x) => x.id === u.partId);
+    if (p) p.qty = roundQty(p.qty + sign * u.qty);
+  });
+  move(oldUsed, +1);
+  move(newUsed, -1);
+}
+
+// Строка «Использовано: …» в карточках поломок и заявок.
+function usedLine(used = [], note = '') {
+  if (!used.length && !note) return '';
+  return `
+    <span class="rq-used">
+      <span class="rq-used__label">Использовано:</span>
+      ${used.map((u) => `<span class="rq-used__item">${escapeHtml(u.name)}${u.article ? ` (${escapeHtml(u.article)})` : ''} — <b>${fmtQty(u.qty)} ${escapeHtml(u.unit)}</b>${u.partId ? '' : ' <i class="muted">не со склада</i>'}</span>`).join('')}
+      ${note ? `<span class="rq-used__item">${escapeHtml(note)}</span>` : ''}
+    </span>`;
 }
 
 function openRepairForm(r = null) {
@@ -1105,6 +1603,7 @@ function openRepairForm(r = null) {
   }
   const curEq = r && eqList.find((e) => e.id === r.equipmentId);
   let type = r ? r.type : '';
+  let priority = r?.priority || 'planned';
   const author = r ? r.author : DB.data.currentShift?.master || '';
 
   openModal(r ? 'Заявка на ремонт' : 'Новая заявка на ремонт', `
@@ -1125,6 +1624,13 @@ function openRepairForm(r = null) {
         ${CONFIG.breakdownTypes.map((v) => `<button type="button" class="chip${v === type ? ' is-active' : ''}" data-type="${escapeHtml(v)}">${escapeHtml(v)}</button>`).join('')}
       </div>
     </div>
+    <div class="field">
+      <span class="field__label">Приоритет</span>
+      <div class="segmented" id="rq-priority">
+        <button type="button" class="segmented__btn${priority === 'planned' ? ' is-active' : ''}" data-priority="planned">Планово</button>
+        <button type="button" class="segmented__btn${priority === 'urgent' ? ' is-active' : ''}" data-priority="urgent">Срочно</button>
+      </div>
+    </div>
     <label class="field">
       <span class="field__label">Что нужно сделать</span>
       <textarea id="rq-desc" rows="3" placeholder="Описание работ">${r ? escapeHtml(r.description) : ''}</textarea>
@@ -1135,14 +1641,21 @@ function openRepairForm(r = null) {
       <datalist id="rq-people">${knownPeople().map((n) => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
     </label>
     ${r ? '' : `<div class="field"><span class="field__label">Дата заявки</span><div class="field__auto">${fmtDateTime(new Date().toISOString())}</div></div>`}
-    <p class="error" id="rq-error" hidden></p>`, [
+    <p class="error" id="rq-error" aria-live="polite" hidden></p>`, [
     { label: 'Отмена' },
-    { label: 'Сохранить', primary: true, onClick: () => saveRepair(r, type) },
+    { label: 'Сохранить', primary: true, onClick: () => saveRepair(r, type, priority) },
   ], { fill: true });
+
+  $('#rq-priority').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-priority]');
+    if (!btn) return;
+    priority = btn.dataset.priority;
+    document.querySelectorAll('#rq-priority [data-priority]').forEach((b) => b.classList.toggle('is-active', b === btn));
+  });
 
   const fillEquipment = () => {
     const g = $('#rq-group').value;
-    const items = eqList.filter((e) => e.group === g).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    const items = eqList.filter((e) => e.group === g).sort(byPos);
     $('#rq-eq').innerHTML = '<option value="" disabled selected>Выберите оборудование</option>' + items
       .map((e) => `<option value="${e.id}"${curEq && curEq.id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}${e.mark ? ` · ${escapeHtml(e.mark)}` : ''}${e.inv ? ` (инв. ${escapeHtml(e.inv)})` : ''}</option>`)
       .join('');
@@ -1158,21 +1671,21 @@ function openRepairForm(r = null) {
   });
 }
 
-function saveRepair(r, type) {
-  const error = (msg) => { $('#rq-error').textContent = msg; $('#rq-error').hidden = false; return false; };
+function saveRepair(r, type, priority = 'planned') {
+  const error = (msg, field) => fieldError(field, msg, '#rq-error');
   const equipmentId = $('#rq-eq').value;
   const description = $('#rq-desc').value.trim();
   const author = $('#rq-author').value.trim();
-  if (!equipmentId) return error('Выберите оборудование.');
-  if (!type) return error('Выберите тип работ.');
-  if (!description) return error('Опишите, что нужно сделать.');
-  if (!author) return error('Укажите, кто составил заявку.');
+  if (!equipmentId) return error('Выберите оборудование.', $('#rq-eq').disabled ? '#rq-group' : '#rq-eq');
+  if (!type) return error('Выберите тип работ.', '#rq-type');
+  if (!description) return error('Опишите, что нужно сделать.', '#rq-desc');
+  if (!author) return error('Укажите, кто составил заявку.', '#rq-author');
 
   DB.update((d) => {
     const found = r && d.repairs.find((x) => x.id === r.id);
-    if (found) Object.assign(found, { equipmentId, type, description, author });
+    if (found) Object.assign(found, { equipmentId, type, description, author, priority });
     else d.repairs.push({
-      id: uid(), equipmentId, type, description, author,
+      id: uid(), equipmentId, type, description, author, priority,
       createdAt: new Date().toISOString(),
       shiftId: d.currentShift?.id || null,
       status: 'open', doneAt: null, doneBy: '',
@@ -1182,19 +1695,419 @@ function saveRepair(r, type) {
 
 function confirmDeleteRepair(r) {
   openModal('Удалить заявку?', `
-    <p>Заявка на ремонт <b>${escapeHtml(equipmentName(r.equipmentId))}</b> от ${fmtDateTime(r.createdAt)} будет удалена без возможности восстановления.</p>`, [
+    <p>Заявка на ремонт <b>${escapeHtml(equipmentName(r.equipmentId))}</b> от ${fmtDateTime(r.createdAt)} будет удалена без возможности восстановления.</p>
+    ${returnNote(r.used)}`, [
     { label: 'Отмена' },
-    { label: 'Удалить', danger: true, onClick: () => DB.update((d) => { d.repairs = d.repairs.filter((x) => x.id !== r.id); }) },
+    {
+      label: 'Удалить', danger: true,
+      onClick: () => DB.update((d) => {
+        applyUsage(d, r.used || [], []);
+        d.repairs = d.repairs.filter((x) => x.id !== r.id);
+      }),
+    },
   ]);
 }
 
+// ================= Склад =================
+// Запчасть: { id, group, kind, name, article, qty, unit, min }
+// Минимум достигнут, когда остаток ≤ минимального (минимум 0 — без контроля).
+
+const fmtQty = (n) => (Number.isInteger(n) ? String(n) : n.toLocaleString('ru-RU', { maximumFractionDigits: 3 }));
+const roundQty = (n) => Math.round(n * 1000) / 1000;
+const isLow = (p) => p.min > 0 && p.qty <= p.min;
+const byRu = (a, b) => a.localeCompare(b, 'ru');
+
+function partRow(p, showPath = false) {
+  const low = isLow(p);
+  return `
+    <button class="pt-row${low ? ' is-low' : ''}" data-part="${p.id}">
+      <span class="pt-row__name">
+        <span class="bd-item__name">${escapeHtml(p.name)}${p.article ? ` <span class="bd-item__mark">${escapeHtml(p.article)}</span>` : ''}</span>
+        ${showPath ? `<span class="eq-row__sub">${escapeHtml(p.group)} · ${escapeHtml(p.kind)}</span>` : ''}
+      </span>
+      <span class="pt-row__qty">${low ? '<span class="warn-icon" aria-hidden="true">!</span>' : ''}<b>${fmtQty(p.qty)}</b> ${escapeHtml(p.unit)}</span>
+      <span class="pt-row__min">${p.min > 0 ? `мин. ${fmtQty(p.min)}` : 'без мин.'}</span>
+    </button>`;
+}
+
+function warehouseView() {
+  const parts = DB.data.parts;
+  if (!parts.length) {
+    return `
+      <div class="empty">
+        <div class="empty__icon">${ICONS.warehouse}</div>
+        <p>Склад пуст.</p>
+        <p class="muted">${state.admin ? 'Чтобы добавить запчасть, нажмите «Запчасть» внизу справа.' : 'Запчасти добавляются в режиме настроек.'}</p>
+      </div>`;
+  }
+  const editing = state.admin && state.editing;
+  const row = (p, path) => withTrash(partRow(p, path), p, 'part');
+  const low = parts.filter(isLow).sort((a, b) => a.qty / a.min - b.qty / b.min);
+
+  const tiles = `
+    <div class="stat-row">
+      ${statTile('Позиций на складе', parts.length)}
+      ${statTile('Достигли минимума', low.length, low.length ? 'warn' : '')}
+    </div>`;
+
+  const lowBlock = low.length ? `
+    <section class="eq-group pt-low">
+      <h3 class="eq-group__title">Достигли минимального остатка · ${low.length}</h3>
+      <div class="eq-rows">${low.map((p) => row(p, true)).join('')}</div>
+    </section>` : '';
+
+  const groups = [...new Set(parts.map((p) => p.group))].sort(byRu);
+  const body = groups.map((g) => {
+    const inGroup = parts.filter((p) => p.group === g);
+    const kinds = [...new Set(inGroup.map((p) => p.kind))].sort(byRu);
+    return `
+      <section class="eq-group">
+        ${editing
+          ? `<input class="pt-rename pt-rename--group" value="${escapeHtml(g)}" data-rename-group="${escapeHtml(g)}" aria-label="Название группы">`
+          : `<h3 class="eq-group__title">${escapeHtml(g)}</h3>`}
+        ${kinds.map((k) => `
+          <div class="pt-kind">
+            ${editing
+              ? `<input class="pt-rename" value="${escapeHtml(k)}" data-rename-kind="${escapeHtml(k)}" data-group="${escapeHtml(g)}" aria-label="Название вида">`
+              : `<h4 class="pt-kind__title">${escapeHtml(k)}</h4>`}
+            <div class="eq-rows">${inGroup.filter((p) => p.kind === k).sort((a, b) => byRu(a.name, b.name)).map((p) => row(p)).join('')}</div>
+          </div>`).join('')}
+      </section>`;
+  }).join('');
+
+  return tiles + lowBlock + body;
+}
+
+// Карточка запчасти для просмотра: данные + где расходовалась.
+function openPartInfo(p) {
+  // Расход по поломкам и заявкам: { at, equipmentId, by, qty, src }.
+  const take = (list, src, at, by) => list
+    .filter((x) => x.status === 'done' && x.used?.some((u) => u.partId === p.id))
+    .map((x) => ({ at: x[at], equipmentId: x.equipmentId, by: x[by], src,
+      qty: x.used.filter((u) => u.partId === p.id).reduce((n, u) => n + u.qty, 0) }));
+  const usage = [...take(DB.data.breakdowns, 'поломка', 'end', 'repairedBy'), ...take(DB.data.repairs, 'заявка', 'doneAt', 'doneBy')]
+    .sort((a, b) => b.at.localeCompare(a.at));
+  openModal(p.name, `
+    <div class="eq-info">
+      <span>Группа: <b>${escapeHtml(p.group)}</b></span>
+      <span>Вид: <b>${escapeHtml(p.kind)}</b></span>
+      ${p.article ? `<span>Артикул: <b>${escapeHtml(p.article)}</b></span>` : ''}
+    </div>
+    <div class="stat-row stat-row--compact">
+      ${statTile('Остаток', `${fmtQty(p.qty)} ${escapeHtml(p.unit)}`, isLow(p) ? 'warn' : '')}
+      ${statTile('Минимальный остаток', p.min > 0 ? `${fmtQty(p.min)} ${escapeHtml(p.unit)}` : '—')}
+    </div>
+    ${isLow(p) ? '<p class="pt-warn">Остаток достиг минимального — нужно пополнить.</p>' : ''}
+    <h4 class="modal__sub">Расход</h4>
+    ${usage.length ? `<ul class="ho-log">${usage.map((u) =>
+      `<li>${fmtDateTime(u.at)} — ${escapeHtml(equipmentName(u.equipmentId))}, ${u.src}: <b>${fmtQty(u.qty)} ${escapeHtml(p.unit)}</b> (${escapeHtml(u.by)})</li>`
+    ).join('')}</ul>` : '<p class="muted">Ещё не расходовалась.</p>'}`, [
+    { label: 'Закрыть', primary: true },
+  ]);
+}
+
+// Выпадающий список с вариантом «+ Новая…» и полем для нового значения.
+function pickOrNew(id, label, values, current, newLabel) {
+  return `
+    <label class="field">
+      <span class="field__label">${label}</span>
+      <select id="${id}">
+        ${values.length && !current ? `<option value="" disabled selected>Выберите</option>` : ''}
+        ${values.map((v) => `<option${v === current ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}
+        <option value="${NEW_GROUP}"${values.length ? '' : ' selected'}>+ ${newLabel}…</option>
+      </select>
+    </label>
+    <label class="field" id="${id}-new-wrap"${values.length ? ' hidden' : ''}>
+      <span class="field__label">${newLabel}: название</span>
+      <input id="${id}-new" autocomplete="off">
+    </label>`;
+}
+const pickedValue = (id) => ($(`#${id}`).value === NEW_GROUP ? $(`#${id}-new`).value.trim() : $(`#${id}`).value);
+function bindPickOrNew(id, onChange) {
+  $(`#${id}`).addEventListener('change', (e) => {
+    const isNew = e.target.value === NEW_GROUP;
+    $(`#${id}-new-wrap`).hidden = !isNew;
+    if (isNew) $(`#${id}-new`).focus();
+    onChange?.();
+  });
+}
+
+function openPartForm(p = null) {
+  const parts = DB.data.parts;
+  const groups = [...new Set(parts.map((x) => x.group))].sort(byRu);
+  const kindsOf = (g) => [...new Set(parts.filter((x) => x.group === g).map((x) => x.kind))].sort(byRu);
+  const units = CONFIG.units;
+
+  openModal(p ? 'Изменить запчасть' : 'Добавить запчасть на склад', `
+    ${pickOrNew('pt-group', 'Группа запчастей', groups, p?.group, 'Новая группа')}
+    <div id="pt-kind-box">${pickOrNew('pt-kind', 'Вид', p ? kindsOf(p.group) : [], p?.kind, 'Новый вид')}</div>
+    <label class="field">
+      <span class="field__label">Наименование</span>
+      <input id="pt-name" autocomplete="off" value="${p ? escapeHtml(p.name) : ''}">
+    </label>
+    <label class="field">
+      <span class="field__label">Артикул / маркировка</span>
+      <input id="pt-article" autocomplete="off" value="${p ? escapeHtml(p.article || '') : ''}" placeholder="Необязательно">
+    </label>
+    <div class="pt-nums">
+      <label class="field">
+        <span class="field__label">Количество</span>
+        <input id="pt-qty" type="number" min="0" step="any" inputmode="decimal" value="${p ? p.qty : ''}">
+      </label>
+      <label class="field">
+        <span class="field__label">Единица</span>
+        <select id="pt-unit">${units.map((u) => `<option${(p?.unit || units[0]) === u ? ' selected' : ''}>${u}</option>`).join('')}</select>
+      </label>
+    </div>
+    <label class="field">
+      <span class="field__label">Минимальный остаток</span>
+      <input id="pt-min" type="number" min="0" step="any" inputmode="decimal" value="${p ? p.min : ''}" placeholder="0 — без контроля">
+    </label>
+    <p class="muted pt-hint">Когда остаток станет равен минимальному или меньше, позиция подсветится жёлтым и встанет в начало списка, а на вкладке «Склад» появится жёлтый счётчик.</p>
+    <p class="error" id="pt-error" aria-live="polite" hidden></p>`, [
+    { label: 'Отмена' },
+    { label: 'Сохранить', primary: true, onClick: () => savePart(p) },
+  ], { fill: true });
+
+  // Виды зависят от группы: пока группа не выбрана — подсказка; новая группа — сразу новый вид.
+  const refreshKinds = () => {
+    const sel = $('#pt-group').value;
+    if (!sel) {
+      $('#pt-kind-box').innerHTML = `
+        <label class="field"><span class="field__label">Вид</span>
+          <select id="pt-kind" disabled><option>Сначала выберите группу</option></select></label>`;
+      return;
+    }
+    const g = sel === NEW_GROUP ? '' : sel;
+    $('#pt-kind-box').innerHTML = pickOrNew('pt-kind', 'Вид', g ? kindsOf(g) : [], '', 'Новый вид');
+    bindPickOrNew('pt-kind');
+  };
+  bindPickOrNew('pt-group', refreshKinds);
+  if (p) bindPickOrNew('pt-kind'); else refreshKinds();
+}
+
+function savePart(p) {
+  const error = (msg, field) => fieldError(field, msg, '#pt-error');
+  const group = pickedValue('pt-group');
+  const kind = pickedValue('pt-kind');
+  const name = $('#pt-name').value.trim();
+  const article = $('#pt-article').value.trim();
+  const qtyRaw = $('#pt-qty').value, minRaw = $('#pt-min').value;
+  const qty = Number(qtyRaw), min = minRaw === '' ? 0 : Number(minRaw);
+  const unit = $('#pt-unit').value;
+
+  if (!group) return error('Укажите группу запчастей.', $('#pt-group').value === NEW_GROUP ? '#pt-group-new' : '#pt-group');
+  if (!kind) return error('Укажите вид.', $('#pt-kind').value === NEW_GROUP ? '#pt-kind-new' : '#pt-kind');
+  if (!name) return error('Укажите наименование.', '#pt-name');
+  if (qtyRaw === '' || !(qty >= 0)) return error('Укажите количество (0 или больше).', '#pt-qty');
+  if (!(min >= 0)) return error('Минимальный остаток не может быть отрицательным.', '#pt-min');
+  const dup = DB.data.parts.some((x) => x.id !== p?.id && x.group === group && x.kind === kind
+    && x.name.toLowerCase() === name.toLowerCase() && (x.article || '') === article);
+  if (dup) return error('Такая запчасть уже есть на складе — измените её количество.', '#pt-name');
+
+  const fields = { group, kind, name, article, qty: roundQty(qty), unit, min: roundQty(min) };
+  DB.update((d) => {
+    const found = p && d.parts.find((x) => x.id === p.id);
+    if (found) Object.assign(found, fields);
+    else d.parts.push({ id: uid(), ...fields });
+  });
+}
+
+function confirmDeletePart(p) {
+  openModal('Удалить запчасть?', `
+    <p>Позиция <b>${escapeHtml(p.name)}</b> (${fmtQty(p.qty)} ${escapeHtml(p.unit)}) будет удалена со склада без возможности восстановления.</p>
+    <p class="muted">Записи о расходе в выполненных заявках сохранятся.</p>`, [
+    { label: 'Отмена' },
+    { label: 'Удалить', danger: true, onClick: () => DB.update((d) => { d.parts = d.parts.filter((x) => x.id !== p.id); }) },
+  ]);
+}
+
+// Переименование группы / вида в режиме редактирования — сразу для всех позиций.
+$('#panel').addEventListener('change', (e) => {
+  const el = e.target;
+  const v = el.value.trim();
+  if (el.dataset.renameGroup !== undefined) {
+    if (!v) { el.value = el.dataset.renameGroup; return; }
+    DB.update((d) => { d.parts.forEach((p) => { if (p.group === el.dataset.renameGroup) p.group = v; }); });
+  }
+  if (el.dataset.renameKind !== undefined) {
+    if (!v) { el.value = el.dataset.renameKind; return; }
+    DB.update((d) => {
+      d.parts.forEach((p) => { if (p.group === el.dataset.group && p.kind === el.dataset.renameKind) p.kind = v; });
+    });
+  }
+});
+
 $('#fab').addEventListener('click', () => {
   if (state.viewer) return;
-  if (state.tab === 'current') return openBreakdownForm();
+  if (state.tab === 'current') return openMachinePicker();
   if (state.tab === 'repair') return openRepairForm();
-  openModal(FAB_TITLES[state.tab], '<p class="muted">Форма будет добавлена позже.</p>', [
-    { label: 'Закрыть' },
-  ]);
+  if (state.tab === 'warehouse') return state.admin && openPartForm();
+});
+
+// ================= Мануалы =================
+// База знаний — в manuals/*.js (MANUALS_KB, kbSearch). Здесь — список и окно поиска.
+
+const KIND_LABELS = { alarm: 'Авария', warning: 'Предупреждение', symptom: 'Неисправность' };
+const kbMakers = () => [...new Set(MANUALS_KB.map((m) => m.maker))].sort(byRu);
+
+// Поиск прямо в панели. Пока запрос пустой — список мануалов; при вводе — результаты.
+// Запрос и фильтры живут в state, чтобы пережить перерисовку вкладки.
+state.kb = { q: '', maker: '', manualId: '' };
+
+function manualsView() {
+  if (!MANUALS_KB.length) {
+    return `
+      <div class="empty">
+        <div class="empty__icon">${ICONS.manuals}</div>
+        <p>Мануалы ещё не добавлены.</p>
+      </div>`;
+  }
+  const { q, maker, manualId } = state.kb;
+  const manual = MANUALS_KB.find((m) => m.id === manualId);
+  return `
+    <div class="kb-search">
+      <label class="kb-search__field">
+        <span class="kb-search__icon">${ICONS.find}</span>
+        <input id="kb-q" type="search" autocomplete="off" value="${escapeHtml(q)}"
+          placeholder="Код ошибки или описание: E07, A.710, нет давления" aria-label="Код ошибки или описание">
+        <button type="button" class="kb-search__clear" data-kb-clear title="Очистить" aria-label="Очистить"${q ? '' : ' hidden'}>✕</button>
+      </label>
+      <select id="kb-maker" class="kb-search__maker" aria-label="Производитель">
+        <option value="">Все производители</option>
+        ${kbMakers().map((mk) => `<option${mk === maker ? ' selected' : ''}>${escapeHtml(mk)}</option>`).join('')}
+      </select>
+    </div>
+    ${manual ? `<p class="kb-filter">Только мануал: <b>${escapeHtml(manual.maker)} ${escapeHtml(manual.model)}</b> <button type="button" class="btn kb-filter__off" data-kb-all>Искать везде</button></p>` : ''}
+    ${state.admin ? `<p class="pt-warn kb-admin-note">Новые мануалы добавляются через обработку: положить PDF в папку <b>мануалы-исходники/&lt;Производитель&gt;</b> и попросить Claude «обработай новые мануалы».</p>` : ''}
+    <div id="kb-results" aria-live="polite">${kbResults()}</div>`;
+}
+
+// Содержимое под поиском: список мануалов или результаты запроса.
+function kbResults() {
+  const { q, maker, manualId } = state.kb;
+  if (!q.trim()) return manualsList(maker);
+  const filter = { maker: maker || undefined, manualId: manualId || undefined };
+  const found = kbSearch(q, filter);
+  if (!found.length) {
+    return `<p class="kb-none">Ничего не найдено${maker ? ` у ${escapeHtml(maker)}` : ''}. Попробуйте другие слова или выберите «Все производители».</p>`;
+  }
+  const exact = found[0].score >= 1000;
+  const shown = found.slice(0, 15);
+  return `
+    <p class="muted kb-count">${exact ? 'Найдено по коду' : 'Похожие записи'}: ${found.length}${found.length > shown.length ? `, показаны первые ${shown.length}` : ''}</p>
+    <div class="kb-list">${shown.map((r, i) => kbCard(r.entry, r.manual, exact ? r.score >= 1000 : i === 0)).join('')}</div>`;
+}
+
+function manualsList(maker) {
+  const list = MANUALS_KB.filter((m) => !maker || m.maker === maker);
+  const total = list.reduce((n, m) => n + m.entries.length, 0);
+  return `
+    <p class="muted kb-summary">${list.length} ${plural(list.length, 'мануал', 'мануала', 'мануалов')} · ${total} ${plural(total, 'запись', 'записи', 'записей')} в базе</p>
+    <div class="kb-manuals">
+      ${[...list].sort((a, b) => byRu(a.maker, b.maker) || byRu(a.model, b.model)).map((m) => {
+        const codes = m.entries.filter((e) => e.kind !== 'symptom').length;
+        const symptoms = m.entries.length - codes;
+        return `
+        <button class="kb-manual" data-kb-manual="${m.id}">
+          <span class="kb-manual__maker">${escapeHtml(m.maker)}</span>
+          <span class="bd-item__name">${escapeHtml(m.title)}</span>
+          <span class="eq-item__meta">
+            <span>${escapeHtml(m.kind)}</span>
+            <span>Модель: <b>${escapeHtml(m.model)}</b></span>
+            <span>Язык: <b>${escapeHtml(m.lang)}</b></span>
+          </span>
+          <span class="kb-manual__nums">
+            ${codes ? `<span><b>${codes}</b> ${plural(codes, 'код', 'кода', 'кодов')} ошибок</span>` : ''}
+            ${symptoms ? `<span><b>${symptoms}</b> ${plural(symptoms, 'неисправность', 'неисправности', 'неисправностей')}</span>` : ''}
+          </span>
+        </button>`;
+      }).join('')}
+    </div>`;
+}
+
+// При вводе обновляется только блок результатов — поле не теряет фокус и текст.
+function updateKbResults() {
+  $('#kb-results').innerHTML = kbResults();
+  $('[data-kb-clear]').hidden = !state.kb.q;
+}
+
+$('#panel').addEventListener('input', (e) => {
+  if (e.target.id !== 'kb-q') return;
+  state.kb.q = e.target.value;
+  updateKbResults();
+});
+$('#panel').addEventListener('change', (e) => {
+  if (e.target.id !== 'kb-maker') return;
+  state.kb.maker = e.target.value;
+  state.kb.manualId = '';
+  renderTab();
+});
+
+// Ссылка на страницу оригинала работает только локально: сами PDF не публикуются.
+const pdfLink = (m, page) => (location.protocol === 'file:'
+  ? `<a href="мануалы-исходники/${encodeURI(m.file)}#page=${page}" target="_blank" rel="noopener">стр. ${page} оригинала</a>`
+  : `стр. ${page} оригинала`);
+
+function kbCard(entry, manual, open = true) {
+  const head = `
+    ${entry.code ? `<span class="kb-code">${escapeHtml(entry.code)}</span>` : ''}
+    <span class="kb-card__title">${escapeHtml(entry.title)}</span>
+    <span class="kb-kind kb-kind--${entry.kind}">${KIND_LABELS[entry.kind]}</span>`;
+  const body = `
+    <div class="kb-card__src">${escapeHtml(manual.maker)} ${escapeHtml(manual.model)} · ${pdfLink(manual, entry.page)}</div>
+    <div class="kb-card__block">
+      <h5>Возможные причины</h5>
+      <ul>${entry.causes.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}</ul>
+    </div>
+    <div class="kb-card__block">
+      <h5>Что делать</h5>
+      <ol>${entry.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+    </div>`;
+  return `
+    <details class="kb-card kb-card--${entry.kind}"${open ? ' open' : ''}>
+      <summary class="kb-card__head">${head}</summary>
+      ${body}
+    </details>`;
+}
+
+// Просмотр всего мануала: записи свёрнуты, раскрываются по нажатию.
+function openManual(m) {
+  const group = (kind, title) => {
+    const list = m.entries.filter((e) => (kind === 'codes' ? e.kind !== 'symptom' : e.kind === 'symptom'));
+    return list.length ? `<h4 class="modal__sub">${title} · ${list.length}</h4><div class="kb-list">${list.map((e) => kbCard(e, m, false)).join('')}</div>` : '';
+  };
+  openModal(`${m.maker} ${m.model}`, `
+    <div class="eq-info">
+      <span>${escapeHtml(m.title)}</span>
+      <span>Язык оригинала: <b>${escapeHtml(m.lang)}</b></span>
+    </div>
+    ${m.note ? `<p class="kb-note">${escapeHtml(m.note)}</p>` : ''}
+    ${group('codes', 'Коды ошибок и предупреждения')}
+    ${group('symptoms', 'Неисправности по признакам')}
+    <p class="muted kb-file">Файл: ${escapeHtml(m.file)}</p>`, [
+    // Окно закрывается, а поиск в панели ограничивается этим мануалом.
+    { label: 'Найти в этом мануале', onClick: () => {
+      Object.assign(state.kb, { maker: m.maker, manualId: m.id });
+      setTimeout(() => { renderTab(); $('#kb-q')?.focus(); });
+    } },
+    { label: 'Закрыть', primary: true },
+  ], { wide: true });
+}
+
+$('#panel').addEventListener('click', (e) => {
+  if (e.target.closest('[data-kb-clear]')) {
+    state.kb.q = '';
+    $('#kb-q').value = '';
+    updateKbResults();
+    return $('#kb-q').focus();
+  }
+  if (e.target.closest('[data-kb-all]')) {
+    state.kb.manualId = '';
+    return renderTab();
+  }
+  const m = e.target.closest('[data-kb-manual]');
+  if (m) openManual(MANUALS_KB.find((x) => x.id === m.dataset.kbManual));
 });
 
 // ================= Завершение смены =================
@@ -1214,7 +2127,10 @@ $('#btn-end-shift').addEventListener('click', () => {
       for (const b of d.breakdowns) {
         if (b.status !== 'repair') continue;
         const c = closes[b.id];
-        if (c) Object.assign(b, { status: 'done', end: c.end, repairedBy: c.repairedBy });
+        if (c) {
+          applyUsage(d, [], c.used);
+          Object.assign(b, { status: 'done', end: c.end, repairedBy: c.repairedBy, used: c.used });
+        }
         else if (shift) (b.handovers ||= []).push({ shiftId: shift.id, master: shift.master, at: now });
       }
       if (shift) d.shifts.push({ ...shift, end: now });
@@ -1258,23 +2174,20 @@ $('#btn-end-shift').addEventListener('click', () => {
               <span class="field__label">Кто закончил ремонт</span>
               <input data-by list="ho-by-list" autocomplete="off" placeholder="Фамилия">
             </label>
+            ${usedField()}
           </div>
         </div>`;
       }).join('')}
     </div>
     <datalist id="ho-by-list">${knownRepairers().map((n) => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
-    <p class="error" id="ho-error" hidden></p>`, [
+    <p class="error" id="ho-error" aria-live="polite" hidden></p>`, [
     { label: 'Отмена' },
     {
       label: 'Закончить смену',
       primary: true,
       onClick: () => {
-        const error = (msg, row) => {
-          $('#ho-error').textContent = msg;
-          $('#ho-error').hidden = false;
-          row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          return false;
-        };
+        // Подсвечиваем карточку станка целиком.
+        const error = (msg, row) => fieldError(row, msg, '#ho-error');
         const closes = {};
         for (const b of open) {
           const row = document.querySelector(`[data-ho="${b.id}"]`);
@@ -1287,7 +2200,9 @@ $('#btn-end-shift').addEventListener('click', () => {
           const end = new Date(endVal);
           if (end < new Date(b.start)) return error(`«${name}»: окончание ремонта раньше начала остановки.`, row);
           if (!by) return error(`«${name}»: укажите, кто закончил ремонт.`, row);
-          closes[b.id] = { end: end.toISOString(), repairedBy: by };
+          const res = readUsed(row.querySelector('[data-used-editor]'), [], Object.values(closes).flatMap((c) => c.used));
+          if (res.error) return error(`«${name}»: ${res.error}`, row);
+          closes[b.id] = { end: end.toISOString(), repairedBy: by, used: res.used };
         }
         finish(closes);
       },
@@ -1306,37 +2221,86 @@ $('#btn-end-shift').addEventListener('click', () => {
   });
 });
 
+// ================= Тема =================
+// Выбор хранится на устройстве: 'auto' | 'light' | 'dark'.
+// Авто: идёт смена — по её типу (ночная → тёмная); смены нет — по расписанию на текущий час.
+const THEMES = [
+  { id: 'auto', label: 'Авто' },
+  { id: 'light', label: 'Светлая' },
+  { id: 'dark', label: 'Тёмная' },
+];
+
+function applyTheme() {
+  const pref = store.get('theme', 'auto');
+  const shift = DB.data.currentShift;
+  const night = pref === 'dark' || (pref === 'auto' && (shift ? shift.type === 'night' : currentShiftType() === 'night'));
+  document.body.classList.toggle('theme-night', night);
+  // Цвет системной панели браузера — под фон текущей темы.
+  document.querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--bg').trim());
+}
+
+const themeSwitch = () => {
+  const pref = store.get('theme', 'auto');
+  return `
+    <div class="field">
+      <span class="field__label">Тема</span>
+      <div class="segmented" id="theme-switch">
+        ${THEMES.map((t) => `<button type="button" class="segmented__btn${t.id === pref ? ' is-active' : ''}" data-theme="${t.id}">${t.label}</button>`).join('')}
+      </div>
+      <span class="used-hint">«Авто» — тёмная тема в ночную смену.</span>
+    </div>`;
+};
+
+// Окно одно на всё приложение — переключатель темы обрабатываем делегированием.
+$('#modal').addEventListener('click', (e) => {
+  const btn = e.target.closest('#theme-switch [data-theme]');
+  if (!btn) return;
+  store.set('theme', btn.dataset.theme);
+  document.querySelectorAll('#theme-switch [data-theme]').forEach((b) => b.classList.toggle('is-active', b === btn));
+  applyTheme();
+});
+
 // ================= Настройки =================
+// Кнопка «Настройки»: настройки устройства (тема) — всем, включая зрителя;
+// вход в режим настроек — по логину и паролю.
 $('#btn-settings').addEventListener('click', () => {
-  if (state.viewer) return;
-  if (state.admin) {
-    const d = DB.data;
-    const updated = d.updatedAt ? new Date(d.updatedAt) : null;
-    openModal('Настройки', `
-      <section class="data-box">
-        <h4 class="data-box__title">Файл данных</h4>
-        <p class="muted">
-          Изменён: ${updated ? `${fmtDate(updated)} ${fmtTime(updated)}` : 'ещё не изменялся'}<br>
-          Оборудования: ${d.equipment.length} · Смен в истории: ${d.shifts.length}
-        </p>
-        <div class="data-box__actions">
-          <button class="btn" id="btn-export">Скачать</button>
-          <button class="btn" id="btn-import">Загрузить</button>
-        </div>
-      </section>
-      <ul class="settings-list">
-        <li>Группы и виды запчастей</li>
-      </ul>
-      <p class="muted">Эти разделы настроек будут добавлены позже.</p>`, [
-      { label: 'Выйти из настроек', onClick: () => setAdmin(false) },
+  if (!state.admin) {
+    openModal('Настройки', themeSwitch(), [
+      ...(state.viewer ? [] : [{ label: 'Режим настроек', onClick: () => { openLogin(); return false; } }]),
       { label: 'Закрыть', primary: true },
     ]);
-    $('#btn-export').addEventListener('click', () => DB.exportFile());
-    $('#btn-import').addEventListener('click', () => $('#file-import').click());
     return;
   }
 
-  openModal('Вход в настройки', `
+  const d = DB.data;
+  const updated = d.updatedAt ? new Date(d.updatedAt) : null;
+  openModal('Настройки', `
+    ${themeSwitch()}
+    <section class="data-box">
+      <h4 class="data-box__title">Файл данных</h4>
+      <p class="muted">
+        Изменён: ${updated ? `${fmtDate(updated)} ${fmtTime(updated)}` : 'ещё не изменялся'}<br>
+        Оборудования: ${d.equipment.length} · Смен в истории: ${d.shifts.length}
+      </p>
+      <div class="data-box__actions">
+        <button class="btn" id="btn-export">Скачать</button>
+        <button class="btn" id="btn-import">Загрузить</button>
+      </div>
+    </section>
+    <ul class="settings-list">
+      <li>Группы и виды запчастей</li>
+    </ul>
+    <p class="muted">Эти разделы настроек будут добавлены позже.</p>`, [
+    { label: 'Выйти из настроек', onClick: () => setAdmin(false) },
+    { label: 'Закрыть', primary: true },
+  ]);
+  $('#btn-export').addEventListener('click', () => DB.exportFile());
+  $('#btn-import').addEventListener('click', () => $('#file-import').click());
+});
+
+function openLogin() {
+  openModal('Вход в режим настроек', `
     <label class="field"><span class="field__label">Логин</span><input id="m-login" autocomplete="off"></label>
     <label class="field"><span class="field__label">Пароль</span><input id="m-pass" type="password"></label>
     <p class="error" id="m-error" hidden>Неверный логин или пароль</p>`, [
@@ -1352,7 +2316,7 @@ $('#btn-settings').addEventListener('click', () => {
     },
   ]);
   $('#m-login').focus();
-});
+}
 
 // Загрузка файла данных: проверяем, показываем что внутри и только после подтверждения заменяем.
 $('#file-import').addEventListener('change', async (e) => {
@@ -1390,14 +2354,51 @@ function setAdmin(on) {
   if (DB.data.currentShift) { renderNav(); renderTab(); }
 }
 
+// ================= Ошибки у полей =================
+// Подсвечивает поле (или карточку), пишет под ним текст ошибки, прокручивает к нему и ставит фокус.
+// Нижняя строка ошибки формы (lineSel, aria-live) — дубль для экранного диктора.
+// field — селектор или элемент; если он внутри .field, подсвечивается всё поле с подписью.
+function fieldError(field, msg, lineSel) {
+  clearFieldErrors();
+  const el = typeof field === 'string' ? $(field) : field;
+  const box = el?.closest('.field') || el;
+  if (box) {
+    box.classList.add('is-invalid');
+    box.insertAdjacentHTML('beforeend', `<span class="field__error">${escapeHtml(msg)}</span>`);
+    box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const target = el.matches('input, select, textarea') ? el : el.querySelector('input:not([type="hidden"]), select, textarea, button');
+    target?.focus({ preventScroll: true });
+  }
+  const line = $(lineSel);
+  if (line) { line.textContent = msg; line.hidden = false; }
+  return false;
+}
+
+function clearFieldErrors(scope = document) {
+  scope.querySelectorAll('.is-invalid').forEach((x) => x.classList.remove('is-invalid'));
+  scope.querySelectorAll('.field__error').forEach((x) => x.remove());
+}
+
+// Поле поправили — подсветка с него снимается.
+['input', 'change', 'click'].forEach((type) => $('#modal').addEventListener(type, (e) => {
+  const box = e.target.closest?.('.is-invalid');
+  if (!box || (type === 'click' && !e.target.closest('button'))) return;
+  box.classList.remove('is-invalid');
+  box.querySelector(':scope > .field__error')?.remove();
+}));
+
 // ================= Модальное окно =================
+let modalReturnFocus = null; // куда вернуть фокус после закрытия окна
+let modalDirty = false;      // в окне что-то ввели — тап по фону и Escape его не закрывают
+
 // fill — кнопки внизу на всю ширину, одинакового размера.
 function openModal(title, bodyHtml, actions, { wide = false, fill = false } = {}) {
   $('#modal .modal__card').classList.toggle('modal__card--wide', wide);
   $('#modal-actions').classList.toggle('modal__actions--fill', fill);
-  $('#modal .modal__card').scrollTop = 0;
+  $('#modal-body').scrollTop = 0;
   $('#modal-title').textContent = title;
   $('#modal-body').innerHTML = bodyHtml;
+  modalDirty = false;
   const wrap = $('#modal-actions');
   wrap.innerHTML = '';
   actions.forEach((a) => {
@@ -1410,16 +2411,54 @@ function openModal(title, bodyHtml, actions, { wide = false, fill = false } = {}
     });
     wrap.appendChild(b);
   });
+  // Фокус — в окно (вызывающий код может сразу перевести его на нужное поле),
+  // после закрытия возвращаем туда, где он был.
+  if ($('#modal').hidden) modalReturnFocus = document.activeElement;
   $('#modal').hidden = false;
+  $('#modal .modal__card').focus();
 }
 
-function closeModal() { $('#modal').hidden = true; }
+function closeModal() {
+  if ($('#modal').hidden) return;
+  $('#modal').hidden = true;
+  if ($('#modal').contains(document.activeElement)) document.activeElement.blur();
+  modalReturnFocus?.focus?.();
+  modalReturnFocus = null;
+}
 
-$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+// Ввели что-то в форме (поле, чип, переключатель, строка запчасти) — окно больше не закрывается
+// случайным тапом по фону или Escape: потерять данные можно только кнопкой «Отмена».
+['input', 'change'].forEach((type) => $('#modal-body').addEventListener(type, () => { modalDirty = true; }));
+$('#modal-body').addEventListener('click', (e) => {
+  if (e.target.closest('#theme-switch')) return; // настройка устройства, а не ввод данных
+  if (e.target.closest('.chip, .segmented__btn, [data-used-add], [data-used-del], [data-choice]')) modalDirty = true;
+});
+
+// Закрытие «мимо» окна: при несохранённом вводе — только короткое встряхивание карточки.
+function dismissModal() {
+  if (!modalDirty) return closeModal();
+  const card = $('#modal .modal__card');
+  card.classList.remove('is-shaking');
+  void card.offsetWidth; // перезапуск анимации
+  card.classList.add('is-shaking');
+}
+
+$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') dismissModal(); });
 document.addEventListener('keydown', (e) => {
   if ($('#modal').hidden) return;
-  if (e.key === 'Escape') closeModal();
-  if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') $('#modal-actions .btn--primary')?.click();
+  if (e.key === 'Escape') dismissModal();
+  if (e.key === 'Enter' && !['TEXTAREA', 'BUTTON'].includes(e.target.tagName)) $('#modal-actions .btn--primary')?.click();
+  // Tab ходит по кругу внутри окна и не уводит фокус на страницу за ним.
+  if (e.key === 'Tab') {
+    const card = $('#modal .modal__card');
+    const items = [...card.querySelectorAll('button, input, select, textarea, a[href], summary, [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !el.disabled && el.offsetParent !== null);
+    if (!items.length) return e.preventDefault();
+    const first = items[0], last = items[items.length - 1];
+    const outside = !card.contains(document.activeElement) || document.activeElement === card;
+    if (e.shiftKey && (outside || document.activeElement === first)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (outside || document.activeElement === last)) { e.preventDefault(); first.focus(); }
+  }
 });
 
 function escapeHtml(s) {
@@ -1430,12 +2469,7 @@ function escapeHtml(s) {
 $('#btn-settings .tab__icon').innerHTML = ICONS.settings;
 $('#btn-edit .edit-btn__icon').innerHTML = ICONS.edit;
 tickClock();
-setInterval(tickClock, 1000);
-
-// Раз в минуту обновляем «Простой» у оборудования в ремонте (если не открыто окно).
-setInterval(() => {
-  if (state.tab === 'current' && (DB.data.currentShift || state.viewer) && $('#modal').hidden) renderTab();
-}, 60000);
+setInterval(tickClock, 1000); // заодно раз в минуту обновляет таймеры простоя (refreshTimers)
 
 // ================= Режим зрителя =================
 // Только просмотр: без начала/закрытия смены, добавления, правки и входа в настройки.
@@ -1461,6 +2495,7 @@ function setJoined(on) {
 // Экран всегда следует за данными: смена началась/закончилась (в том числе на другом устройстве) —
 // переключаемся; поменялись данные — перерисовываем. Зритель остаётся в основном окне и без смены.
 function renderApp() {
+  applyTheme();
   if (!DB.data.currentShift && state.joined) setJoined(false);
   if (state.viewer || (DB.data.currentShift && state.joined)) showMainScreen();
   else if (!$('#screen-main').hidden) showStartScreen();
@@ -1474,3 +2509,9 @@ if (state.joined === undefined) setJoined(!!DB.data.currentShift);
 if (!CONFIG.tabs.some((t) => t.id === state.tab)) state.tab = 'current';
 renderApp();
 if ($('#screen-main').hidden) showStartScreen();
+
+// ================= Офлайн-режим =================
+// Service worker кэширует файлы приложения. С file:// не регистрируется (так браузер не умеет).
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}

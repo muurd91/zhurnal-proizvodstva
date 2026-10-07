@@ -2,7 +2,12 @@
 // masters, shiftTypes и shiftNumbers — только значения по умолчанию для нового файла данных;
 // дальше они хранятся в файле данных и меняются во вкладке «Данные смен» (режим настроек).
 const CONFIG = {
-  masters: ['Иванов', 'Петров', 'Сидоров'],
+  // Мастер привязан к номеру смены: при начале смены номер подставляется сам.
+  masters: [
+    { name: 'Иванов', number: '1' },
+    { name: 'Петров', number: '2' },
+    { name: 'Сидоров', number: '3' },
+  ],
 
   shiftNumbers: ['1', '2', '3', '4'],
 
@@ -11,23 +16,28 @@ const CONFIG = {
     night: { label: 'Ночная',  start: '20:00', end: '08:00' },
   },
 
+  // Единицы измерения запчастей на складе.
+  units: ['шт', 'м', 'кг', 'л', 'компл', 'упак'],
+
   // Подтипы поломок.
   breakdownTypes: ['Механика', 'Электрика', 'Гидравлика', 'Пневматика', 'Электроника', 'Другое'],
 
   // Временные учётные данные для входа в настройки.
   admin: { login: '1', password: '1' },
 
+  // label — короткая подпись на вкладке, title — полное название (подсказка и заголовок панели),
+  // fab — подпись кнопки добавления внизу справа.
   tabs: [
-    { id: 'current',   label: 'Текущая смена',        icon: 'current',   fab: 'add' },
-    { id: 'history',   label: 'История смен',         icon: 'history' },
-    { id: 'equipment', label: 'Перечень оборудования', icon: 'equipment' },
-    { id: 'repair',    label: 'Необходимый ремонт',   icon: 'repair',    fab: 'add' },
-    { id: 'warehouse', label: 'Склад',                icon: 'warehouse', fab: 'add' },
-    { id: 'manuals',   label: 'Мануалы',              icon: 'manuals',   fab: 'search' },
+    { id: 'current',   label: 'Смена',        title: 'Текущая смена',         icon: 'current',   fab: 'Остановка' },
+    { id: 'history',   label: 'История',      title: 'История смен',          icon: 'history' },
+    { id: 'equipment', label: 'Оборудование', title: 'Перечень оборудования', icon: 'equipment' },
+    { id: 'repair',    label: 'Заявки',       title: 'Необходимый ремонт',    icon: 'repair',    fab: 'Заявка' },
+    { id: 'warehouse', label: 'Склад',        title: 'Склад',                 icon: 'warehouse', fab: 'Запчасть' },
+    { id: 'manuals',   label: 'Мануалы',      title: 'Мануалы',               icon: 'manuals' },
   ],
 
   // Вкладки, которые видны только в режиме настроек.
   adminTabs: [
-    { id: 'shifts', label: 'Данные смен', icon: 'shifts' },
+    { id: 'shifts', label: 'Данные смен', title: 'Данные смен', icon: 'shifts' },
   ],
 };

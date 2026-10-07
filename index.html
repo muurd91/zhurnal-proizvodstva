@@ -2,8 +2,12 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#F4F5F7">
   <title>Журнал производства</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -12,7 +16,15 @@
   <section id="screen-start" class="screen screen--center">
     <div class="card card--start" id="start-step-1">
       <h1 class="card__title">Журнал производства</h1>
-      <p class="start-running" id="start-running" hidden></p>
+      <div class="start-clock">
+        <div class="start-clock__time" id="start-time">--:--</div>
+        <div class="start-clock__date" id="start-date"></div>
+      </div>
+      <div class="start-info">
+        <p class="start-schedule" id="start-schedule"></p>
+        <p class="start-running" id="start-running" hidden></p>
+        <p class="start-down" id="start-down" hidden></p>
+      </div>
       <button class="btn btn--oval" id="btn-take-shift">Заступить на смену</button>
       <button class="btn btn--ghost btn--viewer" id="btn-viewer">Режим зрителя</button>
     </div>
@@ -63,7 +75,10 @@
 
       <div class="box app__info" id="shift-info"></div>
 
-      <button class="box app__end" id="btn-end-shift">Закончить<br>смену</button>
+      <div class="app__end">
+        <div class="save-status" id="save-status" aria-live="polite"></div>
+        <button class="btn btn--outline" id="btn-end-shift">Закончить смену</button>
+      </div>
 
       <nav class="app__nav">
         <div class="nav__tabs" id="nav-tabs"></div>
@@ -75,7 +90,7 @@
 
       <main class="box app__panel">
         <div class="panel__content" id="panel"></div>
-        <button class="edit-btn" id="btn-edit" hidden>
+        <button class="edit-btn" id="btn-edit" title="Редактировать" hidden>
           <span class="edit-btn__icon"></span>
           <span class="edit-btn__label">Редактировать</span>
         </button>
@@ -86,7 +101,7 @@
 
   <!-- ===== Модальное окно ===== -->
   <div class="modal" id="modal" hidden>
-    <div class="modal__card">
+    <div class="modal__card" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
       <h3 class="modal__title" id="modal-title"></h3>
       <div class="modal__body" id="modal-body"></div>
       <div class="modal__actions" id="modal-actions"></div>
@@ -97,6 +112,17 @@
 
   <script src="js/config.js"></script>
   <script src="js/data.js"></script>
+  <script src="manuals/kb.js"></script>
+  <script src="manuals/kb-sigma-common.js"></script>
+  <script src="manuals/kb-omron.js"></script>
+  <script src="manuals/kb-yaskawa.js"></script>
+  <script src="manuals/kb-atlas-copco.js"></script>
+  <script src="manuals/kb-cross-air.js"></script>
+  <script src="manuals/kb-shini.js"></script>
+  <script src="manuals/kb-delta.js"></script>
+  <script src="manuals/kb-hcfa.js"></script>
+  <script src="manuals/kb-mitsubishi.js"></script>
+  <script src="manuals/kb-invt.js"></script>
   <script src="js/icons.js"></script>
   <script src="js/app.js"></script>
 </body>

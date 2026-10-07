@@ -13,18 +13,24 @@ function emptyData() {
     updatedAt: null,
     currentShift: null, // { id, master, type, start }
     shifts: [],         // завершённые смены: { id, master, type, start, end }
-    equipment: [],      // { id, group, name, mark, inv }
+    equipment: [],      // { id, group, name, mark, inv, pos } — pos: позиция в цеху (число или null)
     breakdowns: [],     // поломки
-    repairs: [],        // заявки на ремонт
-    parts: [],          // запчасти на складе: { ..., qty, min }
+    repairs: [],        // заявки на ремонт: priority 'urgent' | 'planned'
+    parts: [],          // склад: { id, group, kind, name, article, qty, unit, min }
     manuals: [],        // мануалы
     settings: defaultSettings(), // данные смен: мастера, номера, время
   };
 }
 
+// Мастер: { name, number }. Старый формат (просто фамилия) — без номера.
+function normalizeMaster(m) {
+  if (typeof m === 'string') return { name: m.trim(), number: '' };
+  return { name: String(m?.name || '').trim(), number: String(m?.number || '') };
+}
+
 function defaultSettings() {
   return {
-    masters: [...CONFIG.masters],
+    masters: CONFIG.masters.map((m) => ({ ...m })),
     shiftNumbers: [...CONFIG.shiftNumbers],
     shiftTypes: JSON.parse(JSON.stringify(CONFIG.shiftTypes)),
   };
@@ -49,10 +55,13 @@ function normalizeData(raw) {
   // Настройки смен: недостающие поля берём по умолчанию.
   const s = data.settings && typeof data.settings === 'object' ? data.settings : {};
   data.settings = {
-    masters: Array.isArray(s.masters) ? s.masters : base.settings.masters,
+    masters: Array.isArray(s.masters) ? s.masters.map(normalizeMaster).filter((m) => m.name) : base.settings.masters,
     shiftNumbers: Array.isArray(s.shiftNumbers) ? s.shiftNumbers : base.settings.shiftNumbers,
     shiftTypes: { ...base.settings.shiftTypes, ...(s.shiftTypes || {}) },
   };
+  // Поля, появившиеся позже: в старых файлах их нет — подставляем умолчания.
+  data.repairs = data.repairs.map((r) => ({ ...r, priority: r.priority === 'urgent' ? 'urgent' : 'planned' }));
+  data.equipment = data.equipment.map((e) => ({ ...e, pos: Number.isFinite(e.pos) ? e.pos : null }));
   return data;
 }
 
@@ -99,8 +108,11 @@ const DB = (() => {
 
   const emit = () => listeners.forEach((fn) => fn(data));
 
+  let saveFailed = false; // последняя запись в хранилище не удалась
+
   function persist() {
-    if (!backend.save(data)) alert('Не удалось сохранить данные: память браузера переполнена или недоступна.');
+    saveFailed = !backend.save(data);
+    if (saveFailed) alert('Не удалось сохранить данные: память браузера переполнена или недоступна.');
   }
 
   // Изменения из другой вкладки этого же браузера.
@@ -111,6 +123,12 @@ const DB = (() => {
 
   return {
     get data() { return data; },
+
+    // Состояние сохранения для индикатора в шапке.
+    // state: 'saved' | 'error'; адаптер OneDrive добавит 'syncing' и 'offline' (pending — сколько изменений ждёт отправки).
+    get saveState() {
+      return { state: saveFailed ? 'error' : 'saved', at: data.updatedAt, pending: 0 };
+    },
 
     // Все изменения — только через update: он ставит время, сохраняет и оповещает.
     update(fn) {
