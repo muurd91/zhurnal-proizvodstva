@@ -16,6 +16,15 @@ const CONFIG = {
     night: { label: 'Ночная',  start: '20:00', end: '08:00' },
   },
 
+  // Синхронизация с OneDrive (личный аккаунт Microsoft). clientId — не секрет: это
+  // идентификатор регистрации приложения в Microsoft Entra (тип SPA, без секрета).
+  onedrive: {
+    clientId: 'a6ed8be5-8fa0-404d-9ac4-5cde51b4041a',
+    folder: 'Производственный журнал',
+    file: 'zhurnal-proizvodstva.json',
+    pollSeconds: 45, // как часто проверять, не изменил ли файл другой планшет
+  },
+
   // Единицы измерения запчастей на складе.
   units: ['шт', 'м', 'кг', 'л', 'компл', 'упак'],
 

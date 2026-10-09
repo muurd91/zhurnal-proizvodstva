@@ -231,21 +231,69 @@ function fmtWhen(iso) {
   return `${fmtDate(d).slice(0, 5)} ${fmtTime(d)}`;
 }
 
-// Индикатор сохранения. Сейчас данные только локальные: «сохранено» или «не сохранено».
-// Состояния будущей синхронизации с OneDrive уже предусмотрены.
+// Индикатор сохранения: память устройства (saved / error) и OneDrive (local, auth, syncing, offline, cloudError).
+// Нажатие на индикатор открывает окно подключения OneDrive.
 const SAVE_LABELS = {
-  saved:   (s) => (s.at ? `Сохранено · ${fmtWhen(s.at)}` : 'Сохранено'),
-  syncing: () => 'Синхронизация…',
-  offline: (s) => `Офлайн, ${s.pending} ${plural(s.pending, 'изменение', 'изменения', 'изменений')}`,
-  error:   () => 'Не сохранено',
+  saved:      (s) => (s.cloud ? `OneDrive${s.at ? ` · ${fmtWhen(s.at)}` : ''}` : s.at ? `Сохранено · ${fmtWhen(s.at)}` : 'Сохранено'),
+  syncing:    () => 'Синхронизация…',
+  offline:    (s) => `Офлайн, ${s.pending} ${plural(s.pending, 'изменение', 'изменения', 'изменений')}`,
+  error:      () => 'Не сохранено',
+  local:      () => 'Только на устройстве',
+  auth:       () => 'Войдите в OneDrive',
+  cloudError: () => 'Ошибка OneDrive',
+};
+const SAVE_TITLES = {
+  saved:      (s) => (s.cloud ? 'Изменения записаны на устройстве и в OneDrive' : 'Все изменения записаны на этом устройстве'),
+  syncing:    () => 'Изменения отправляются в OneDrive',
+  offline:    () => 'Нет связи с OneDrive. Изменения сохранены на устройстве и уйдут, когда появится сеть',
+  error:      () => 'Последнее изменение не удалось записать в память устройства',
+  local:      () => 'Данные хранятся только на этом устройстве. Нажмите, чтобы подключить OneDrive',
+  auth:       () => 'Нужно войти в OneDrive заново. Изменения пока сохраняются на устройстве',
+  cloudError: () => 'OneDrive вернул ошибку. Нажмите, чтобы посмотреть',
 };
 function renderSaveStatus() {
   const s = DB.saveState;
   const el = $('#save-status');
   el.className = `save-status save-status--${s.state}`;
   el.textContent = SAVE_LABELS[s.state](s);
-  el.title = s.state === 'error' ? 'Последнее изменение не удалось записать в память устройства' : 'Все изменения записаны на этом устройстве';
+  el.title = SAVE_TITLES[s.state](s);
 }
+
+function openCloudModal() {
+  const i = OneDrive.info();
+  const err = i.error ? `<p class="od-error">${escapeHtml(i.error)}</p>` : '';
+  const path = `<b>${escapeHtml(i.path)}</b>`;
+  if (!i.available) {
+    openModal('OneDrive', '<p>Синхронизация работает, когда приложение открыто по адресу сайта (https). Из файла на диске она недоступна.</p>',
+      [{ label: 'Закрыть', primary: true }]);
+    return;
+  }
+  if (!i.connected) {
+    openModal('OneDrive', `
+      <p>${i.needAuth ? 'Сеанс входа истёк — войдите заново.' : 'Данные сейчас хранятся только на этом устройстве.'}
+         Войдите в аккаунт Microsoft, и журнал будет сохраняться в OneDrive (${path}) и станет общим для всех устройств.</p>
+      <p class="muted">Пока вы не вошли, изменения сохраняются на устройстве и ничего не теряется.</p>${err}`, [
+      { label: 'Позже' },
+      { label: 'Войти в OneDrive', primary: true, onClick: () => { OneDrive.signIn(); return false; } },
+    ]);
+    return;
+  }
+  const last = i.lastSync ? `${fmtDate(new Date(i.lastSync))} ${fmtTime(new Date(i.lastSync))}` : 'ещё не было';
+  openModal('OneDrive', `
+    <p>Подключено${i.account ? `: <b>${escapeHtml(i.account)}</b>` : ''}.</p>
+    <p class="muted">Файл: ${path}<br>
+      Последняя синхронизация: ${last}<br>
+      Ждёт отправки: ${i.pending}</p>${err}
+    <p class="muted">«Отключить» не удаляет данные ни на устройстве, ни в OneDrive.</p>`, [
+    { label: 'Отключить', danger: true, onClick: () => OneDrive.signOut() },
+    { label: 'Закрыть' },
+    { label: 'Синхронизировать', primary: true, onClick: () => OneDrive.syncNow() },
+  ]);
+}
+$('#save-status').addEventListener('click', openCloudModal);
+$('#save-status').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCloudModal(); }
+});
 
 function renderShiftInfo() {
   const shift = DB.data.currentShift;
@@ -2509,6 +2557,10 @@ if (state.joined === undefined) setJoined(!!DB.data.currentShift);
 if (!CONFIG.tabs.some((t) => t.id === state.tab)) state.tab = 'current';
 renderApp();
 if ($('#screen-main').hidden) showStartScreen();
+
+// ================= OneDrive =================
+OneDrive.onChange(renderSaveStatus);
+OneDrive.init();
 
 // ================= Офлайн-режим =================
 // Service worker кэширует файлы приложения. С file:// не регистрируется (так браузер не умеет).

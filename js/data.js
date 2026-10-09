@@ -110,9 +110,13 @@ const DB = (() => {
 
   let saveFailed = false; // последняя запись в хранилище не удалась
 
-  function persist() {
+  let remote = null; // адаптер облака (OneDrive): localChange(), state()
+
+  // replaceAll — файл данных загружен вручную: он заменяет и облачную копию целиком.
+  function persist(replaceAll = false) {
     saveFailed = !backend.save(data);
     if (saveFailed) alert('Не удалось сохранить данные: память браузера переполнена или недоступна.');
+    remote?.localChange({ replaceAll });
   }
 
   // Изменения из другой вкладки этого же браузера.
@@ -125,9 +129,22 @@ const DB = (() => {
     get data() { return data; },
 
     // Состояние сохранения для индикатора в шапке.
-    // state: 'saved' | 'error'; адаптер OneDrive добавит 'syncing' и 'offline' (pending — сколько изменений ждёт отправки).
+    // state: 'saved' | 'error' (память устройства) | 'local' | 'auth' | 'syncing' | 'offline' | 'cloudError' (OneDrive).
+    // pending — сколько изменений ждёт отправки; cloud — данные связаны с OneDrive.
     get saveState() {
-      return { state: saveFailed ? 'error' : 'saved', at: data.updatedAt, pending: 0 };
+      if (saveFailed) return { state: 'error', at: data.updatedAt, pending: 0 };
+      const cloud = remote?.state();
+      return { at: data.updatedAt, pending: 0, ...(cloud || { state: 'saved' }) };
+    },
+
+    // Подключение облака: все локальные изменения идут через persist → remote.localChange().
+    attachSync(adapter) { remote = adapter; },
+
+    // Данные, пришедшие из облака: пишем локально и показываем, но обратно не отправляем.
+    applyRemote(doc) {
+      data = normalizeData(doc);
+      saveFailed = !backend.save(data);
+      emit();
     },
 
     // Все изменения — только через update: он ставит время, сохраняет и оповещает.
@@ -141,7 +158,7 @@ const DB = (() => {
     // Полная замена (загрузка файла).
     replace(newData) {
       data = normalizeData(newData);
-      persist();
+      persist(true);
       emit();
     },
 

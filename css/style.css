@@ -270,13 +270,19 @@ button { cursor: pointer; }
 }
 .btn--outline { background: transparent; border: 2px solid var(--text); font-weight: 600; white-space: nowrap; }
 @media (hover: hover) { #btn-end-shift:hover { border-color: var(--danger); color: var(--danger); } }
-.save-status { font-size: .8em; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.save-status { font-size: .8em; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; cursor: pointer; }
 .save-status--saved::before { content: "✓ "; }
 .save-status--error { color: var(--danger); font-weight: 700; }
 .save-status--error::before { content: "▲ "; }
 .save-status--syncing::before { content: "↻ "; }
 .save-status--offline { color: var(--text); }
 .save-status--offline::before { content: "▲ "; }
+.save-status--local::before { content: "☁ "; }
+.save-status--auth { color: var(--danger); font-weight: 700; }
+.save-status--auth::before { content: "▲ "; }
+.save-status--cloudError { color: var(--danger); font-weight: 700; }
+.save-status--cloudError::before { content: "▲ "; }
+.od-error { color: var(--danger); font-weight: 700; overflow-wrap: anywhere; }
 
 /* Боковая навигация: 6 вкладок по центру, настройки внизу */
 .app__nav {
