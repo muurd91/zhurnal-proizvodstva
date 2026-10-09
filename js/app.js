@@ -623,7 +623,7 @@ function eqStats(eqId, from) {
     ? closed.reduce((n, b) => n + (new Date(b.end) - new Date(b.start)), 0) / closed.length
     : null;
   const byType = {};
-  for (const b of started) byType[b.type] = (byType[b.type] || 0) + 1;
+  for (const b of started) for (const t of bdTypes(b)) byType[t] = (byType[t] || 0) + 1; // с несколькими типами — в каждом
   const last = list.reduce((m, b) => (!m || b.start > m ? b.start : m), null);
   return { inRepair, count: started.length, total: list.length, downtime, avgRepair, byType, last, history: list };
 }
@@ -860,7 +860,7 @@ function breakdownRow(b, carried = false) {
       <span class="hist-row__time">${carried ? `<small>${fmtDate(new Date(b.start)).slice(0, 5)}</small>` : ''}${fmtTime(new Date(b.start))}</span>
       <span class="hist-row__main">
         <span class="hist-row__name">${escapeHtml(equipmentName(b.equipmentId))}</span>
-        <span class="hist-row__reason">${escapeHtml(b.reason)} <span class="muted">· ${escapeHtml(b.type)}</span></span>
+        <span class="hist-row__reason">${escapeHtml(b.reason)} <span class="muted">· ${escapeHtml(bdTypeText(b))}</span></span>
         ${from ? `<span class="hist-row__from">${from}</span>` : ''}
       </span>
       <span class="hist-row__side">
@@ -1175,10 +1175,15 @@ function saveEquipment(eq) {
 
 // ================= Поломки =================
 // Запись: { id, shiftId, master, equipmentId, start, reason, type,
-//           status: 'repair' | 'done', kind: 'repair' | 'maintenance', end, repairedBy }
+//           status: 'repair' | 'done', kind: 'repair' | 'maintenance', end, repairedBy,
+//           types: ['Механика', ...], type: 'Механика, ...' }
+// types — один или несколько типов; type — те же типы строкой (для старых записей и старых версий приложения).
 // status — открыта ('repair') или закрыта ('done'); kind — вид: ремонт (по умолчанию) или обслуживание.
 // Открытая запись любого вида имеет status 'repair': конец смены, передача и закрытие работают одинаково.
 const isMaint = (b) => !!b && b.kind === 'maintenance';
+// Типы записи: у новых — список types, у старых — одна строка type.
+const bdTypes = (b) => (b && Array.isArray(b.types) && b.types.length ? b.types : b && b.type ? [b.type] : []);
+const bdTypeText = (b) => bdTypes(b).join(', ');
 // Ключ для класса и цвета: done | maintenance | repair
 const bdKey = (b) => (b.status === 'done' ? 'done' : isMaint(b) ? 'maintenance' : 'repair');
 const bdStatusLabel = (b) => (b.status === 'done'
@@ -1211,7 +1216,7 @@ function breakdownCard(b, clickable = true, showEq = true) {
       </span>
       ${showEq ? `<span class="bd-item__reason">${escapeHtml(b.reason)}</span>` : ''}
       <span class="bd-item__meta">
-        <span>${escapeHtml(b.type)}</span>
+        <span>${escapeHtml(bdTypeText(b))}</span>
         <span>Остановка: <b>${fmtDateTime(b.start)}</b></span>
         ${done ? `<span>Окончание: <b>${fmtDateTime(b.end)}</b></span>` : ''}
         <span>Простой: <b${done ? '' : ` data-since="${b.start}"`}>${dur}</b></span>
@@ -1305,15 +1310,15 @@ function openBreakdownForm(bd = null, eqId = null) {
   const master = bd ? bd.master : DB.data.currentShift?.master || '';
   let status = bd ? bd.status : 'repair';
   let kind = isMaint(bd) ? 'maintenance' : 'repair'; // вид записи: ремонт или обслуживание
-  let type = bd ? bd.type : '';
+  let types = bd ? [...bdTypes(bd)] : []; // можно выбрать несколько типов
 
   const chips = (name, items, active) => items
-    .map((v) => `<button type="button" class="chip${v === active ? ' is-active' : ''}" data-${name}="${escapeHtml(v)}">${escapeHtml(v)}</button>`)
+    .map((v) => `<button type="button" class="chip${(Array.isArray(active) ? active.includes(v) : v === active) ? ' is-active' : ''}" data-${name}="${escapeHtml(v)}">${escapeHtml(v)}</button>`)
     .join('');
 
   const actions = [
     { label: 'Отмена' },
-    { label: 'Сохранить', primary: true, onClick: () => saveBreakdown(bd, { status, type, kind }) },
+    { label: 'Сохранить', primary: true, onClick: () => saveBreakdown(bd, { status, types, kind }) },
   ];
 
   openModal(bd ? 'Поломка' : 'Добавить поломку', `
@@ -1337,8 +1342,8 @@ function openBreakdownForm(bd = null, eqId = null) {
       <textarea id="bd-reason" rows="3" placeholder="Что случилось">${bd ? escapeHtml(bd.reason) : ''}</textarea>
     </label>
     <div class="field">
-      <span class="field__label">Тип поломки</span>
-      <div class="chips" id="bd-type">${chips('type', CONFIG.breakdownTypes, type)}</div>
+      <span class="field__label">Тип поломки <span class="muted">· можно выбрать несколько</span></span>
+      <div class="chips" id="bd-type">${chips('type', CONFIG.breakdownTypes, types)}</div>
     </div>
     <div class="field">
       <span class="field__label">Состояние</span>
@@ -1388,8 +1393,12 @@ function openBreakdownForm(bd = null, eqId = null) {
   $('#bd-type').addEventListener('click', (e) => {
     const chip = e.target.closest('[data-type]');
     if (!chip) return;
-    type = chip.dataset.type;
-    document.querySelectorAll('#bd-type .chip').forEach((c) => c.classList.toggle('is-active', c === chip));
+    // Нажатие включает или выключает тип; порядок — как в списке типов.
+    const t = chip.dataset.type;
+    const set = new Set(types);
+    if (set.has(t)) set.delete(t); else set.add(t);
+    types = [...CONFIG.breakdownTypes.filter((x) => set.has(x)), ...[...set].filter((x) => !CONFIG.breakdownTypes.includes(x))];
+    chip.classList.toggle('is-active', set.has(t));
   });
   $('#bd-status').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-status]');
@@ -1401,7 +1410,7 @@ function openBreakdownForm(bd = null, eqId = null) {
   });
 }
 
-function saveBreakdown(bd, { status, type, kind = 'repair' }) {
+function saveBreakdown(bd, { status, types = [], kind = 'repair' }) {
   const error = (msg, field) => fieldError(field, msg, '#bd-error');
   const equipmentId = $('#bd-eq').value;
   const startVal = $('#bd-start').value;
@@ -1410,7 +1419,7 @@ function saveBreakdown(bd, { status, type, kind = 'repair' }) {
   if (!equipmentId) return error('Выберите оборудование.', $('#bd-eq').disabled ? '#bd-group' : '#bd-eq');
   if (!startVal) return error('Укажите время начала остановки.', '#bd-start');
   if (!reason) return error('Опишите причину остановки.', '#bd-reason');
-  if (!type) return error('Выберите тип поломки.', '#bd-type');
+  if (!types.length) return error('Выберите хотя бы один тип поломки.', '#bd-type');
 
   const start = new Date(startVal);
   let end = null;
@@ -1430,7 +1439,7 @@ function saveBreakdown(bd, { status, type, kind = 'repair' }) {
   }
 
   const fields = {
-    equipmentId, reason, type, status, kind,
+    equipmentId, reason, types, type: types.join(', '), status, kind,
     start: start.toISOString(),
     end: end ? end.toISOString() : null,
     repairedBy,
