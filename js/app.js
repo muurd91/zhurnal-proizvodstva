@@ -427,7 +427,7 @@ function renderNav() {
       const cls = `tab${t.id === state.tab ? ' is-active' : ''}${CONFIG.adminTabs.includes(t) ? ' tab--admin' : ''}`;
       const title = badge ? `${t.title}: ${ALERT_TITLES[t.id](badge.count)}` : t.title;
       return `
-      <button class="${cls}" data-tab="${t.id}" title="${title}">
+      <button class="${cls}" data-tab="${t.id}" title="${title}" aria-label="${title}">
         <span class="tab__icon">${ICONS[t.icon]}</span>
         <span class="tab__label">${t.label}</span>
         ${badge ? `<span class="tab__badge tab__badge--${badge.tone}">${badge.count}</span>` : ''}
