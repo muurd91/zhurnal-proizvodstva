@@ -7,7 +7,8 @@
 // без сторонних библиотек. Доступ к файлу — Microsoft Graph, путь вида
 //   /me/drive/root:/<папка>/<файл>
 // Параллельные правки с двух устройств сверяются по ETag файла; при расхождении
-// документы сливаются по id записей (см. mergeDocs).
+// документы сливаются трёхсторонне: своя копия, копия в облаке и «база» — состояние на момент
+// последней успешной синхронизации. База нужна, чтобы отличить «удалено» от «ещё не пришло» (см. mergeDocs).
 //
 // Ограничение Microsoft для SPA: refresh-токен живёт ~24 часа, потом нужен повторный вход.
 // До входа данные копятся локально и ничего не теряется.
@@ -19,6 +20,7 @@ const OneDrive = (() => {
   const SCOPES = 'Files.ReadWrite User.Read offline_access';
   const KEY = 'jp.od';        // токены и служебное состояние
   const KEY_AUTH = 'jp.od.auth'; // verifier/state на время перехода на страницу входа
+  const KEY_BASE = 'jp.od.base'; // документ на момент последней успешной синхронизации
 
   // Работает только по http(s) в защищённом контексте (нужен crypto.subtle) и с заданным clientId.
   const available = /^https?:$/.test(location.protocol) && window.isSecureContext && !!window.crypto?.subtle && !!cfg.clientId;
@@ -30,6 +32,14 @@ const OneDrive = (() => {
   };
   let st = loadState(); // { refresh, access, expires, etag, account, lastSync, pending, needAuth }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {} };
+
+  // База слияния. Переживает повторный вход, сбрасывается только при «Отключить».
+  const loadBase = () => { try { return JSON.parse(localStorage.getItem(KEY_BASE) || 'null'); } catch { return null; } };
+  let base = loadBase();
+  const setBase = (doc) => {
+    base = JSON.parse(JSON.stringify(doc));
+    try { localStorage.setItem(KEY_BASE, JSON.stringify(base)); } catch {}
+  };
 
   let status = 'idle'; // 'idle' | 'syncing' | 'offline' | 'cloudError'
   let lastError = '';
@@ -134,6 +144,8 @@ const OneDrive = (() => {
 
   function signOut() {
     st = { pending: 0 };
+    base = null;
+    try { localStorage.removeItem(KEY_BASE); } catch {}
     save();
     status = 'idle';
     lastError = '';
@@ -209,18 +221,58 @@ const OneDrive = (() => {
     ? Object.fromEntries(Object.keys(v).sort().map((key) => [key, v[key]]))
     : v));
 
-  // Документ, изменённый позже, главный: его значения и порядок записей. Записи другого документа,
-  // которых нет в главном (по id), добавляются в конец. Оговорка: запись, удалённая на одном
-  // устройстве, может вернуться, если за это время файл правило другое устройство.
-  function mergeDocs(local, remote) {
-    const newer = (local.updatedAt || '') > (remote.updatedAt || '') ? local : remote;
-    const older = newer === local ? remote : local;
+  // Трёхстороннее слияние. base — документ на момент последней успешной синхронизации (может быть null:
+  // тогда записи только объединяются, удалений не видно).
+  //  · запись есть в базе и пропала у одной из сторон — её удалили, удаление выигрывает
+  //    (если вторая сторона успела её изменить — выигрывает правка);
+  //  · запись изменена только на одной стороне — берём изменённую; на обеих — побеждает более новый документ;
+  //  · запись новая (нет в базе) — добавляется.
+  // Скалярные поля и вложенные объекты (смена, настройки) сливаются так же по целому значению.
+  const same = (x, y) => canon(x) === canon(y);
+  const keyOf = (item) => (item && item.id !== undefined ? `id:${item.id}` : `json:${canon(item)}`);
+
+  function mergeList(L, R, B, localIsNewer) {
+    const index = (list) => new Map(list.map((x) => [keyOf(x), x]));
+    const lm = index(L), rm = index(R), bm = B ? index(B) : null;
+    const order = localIsNewer ? [...L, ...R] : [...R, ...L]; // порядок — по главному документу
+    const seen = new Set();
+    const out = [];
+    for (const item of order) {
+      const k = keyOf(item);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const l = lm.get(k), r = rm.get(k), bs = bm && bm.get(k);
+      if (l && r) {
+        if (bs && same(l, bs)) out.push(r);          // у нас не менялось — берём облачную
+        else if (bs && same(r, bs)) out.push(l);     // в облаке не менялось — берём свою
+        else out.push(localIsNewer ? l : r);
+      } else if (l) {
+        if (bs && same(l, bs)) continue;             // была в базе и не менялась, а в облаке исчезла — удалена там
+        out.push(l);                                 // новая у нас (или правка против удаления)
+      } else if (bs && same(r, bs)) continue;        // была в базе и не менялась, а у нас исчезла — удалена нами
+      else out.push(r);                              // новая в облаке (или правка против удаления)
+    }
+    return out;
+  }
+
+  function mergeDocs(local, remote, baseDoc) {
+    const localIsNewer = (local.updatedAt || '') > (remote.updatedAt || '');
+    const newer = localIsNewer ? local : remote;
+    const older = localIsNewer ? remote : local;
     const out = { ...newer, updatedAt: newer.updatedAt || older.updatedAt };
-    const keyOf = (item) => (item && item.id !== undefined ? `id:${item.id}` : `json:${canon(item)}`);
-    for (const key of Object.keys(emptyData())) {
-      if (!Array.isArray(newer[key]) || !Array.isArray(older[key])) continue;
-      const seen = new Set(newer[key].map(keyOf));
-      out[key] = [...newer[key], ...older[key].filter((item) => !seen.has(keyOf(item)))];
+    const skip = new Set(['format', 'version', 'updatedAt']);
+    for (const key of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+      if (skip.has(key)) continue;
+      const L = local[key], R = remote[key], B = baseDoc ? baseDoc[key] : undefined;
+      if (Array.isArray(L) && Array.isArray(R)) {
+        out[key] = mergeList(L, R, Array.isArray(B) ? B : null, localIsNewer);
+      } else if (baseDoc && B !== undefined && same(L, B)) {
+        out[key] = R;                                // у нас не менялось — берём облачное
+      } else if (baseDoc && B !== undefined && same(R, B)) {
+        out[key] = L;                                // в облаке не менялось — берём своё
+      } else {
+        out[key] = newer[key];
+      }
     }
     return out;
   }
@@ -233,17 +285,24 @@ const OneDrive = (() => {
       let remote = null;
       if (meta && !overwrite && meta.eTag !== st.etag) {
         remote = await download();
-        doc = mergeDocs(DB.data, remote);
+        doc = mergeDocs(DB.data, remote, base);
         if (canon(doc) !== canon(DB.data)) DB.applyRemote(doc);
       }
       const needPush = overwrite || !meta || st.pending > 0 || (remote && canon(doc) !== canon(remote));
-      if (!needPush) { st.etag = meta.eTag; return; }
+      if (!needPush) {
+        st.etag = meta.eTag;
+        if (remote || !base) setBase(doc); // сравнялись с облаком — это и есть новая база
+        return;
+      }
 
       const sent = st.pending;
       const wasOverwrite = overwrite;
-      const res = await upload(doc, meta ? meta.eTag : null);
+      // Снимок на момент отправки: пока идёт запись, документ могут изменить, и в базу должно попасть только ушедшее.
+      const snap = JSON.parse(JSON.stringify(doc));
+      const res = await upload(snap, meta ? meta.eTag : null);
       if (res) {
         st.etag = res.eTag;
+        setBase(snap); // то, что ушло в облако, — новая база
         st.pending = Math.max(0, st.pending - sent);
         if (wasOverwrite) overwrite = false;
         return;
