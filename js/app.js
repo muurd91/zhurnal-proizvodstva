@@ -23,7 +23,7 @@ const state = {
   eqOpen: new Set(),                     // раскрытые строки в перечне оборудования
   histOpen: new Set(),                   // раскрытые смены в истории (не сохраняется)
   histSeeded: new Set(),                 // смены, которым уже выставили раскрытие по умолчанию
-  admin: false,                     // режим настроек, не сохраняется
+  admin: false,                     // режим настроек: переживает обновление страницы, но не закрытие приложения
   editing: false,                   // редактирование текущей вкладки (только в режиме настроек)
   viewer: store.get('viewer', false), // режим зрителя: только просмотр, запоминается на устройстве
 };
@@ -2464,8 +2464,16 @@ $('#file-import').addEventListener('change', async (e) => {
   ]);
 });
 
+// Режим настроек помним в sessionStorage: обновление страницы его не сбрасывает,
+// а закрытие приложения или вкладки — сбрасывает, и пароль придётся ввести снова.
+const adminSession = {
+  get() { try { return sessionStorage.getItem('jp.admin') === '1'; } catch { return false; } },
+  set(on) { try { on ? sessionStorage.setItem('jp.admin', '1') : sessionStorage.removeItem('jp.admin'); } catch {} },
+};
+
 function setAdmin(on) {
   state.admin = on;
+  adminSession.set(on);
   state.editing = false;
   document.body.classList.toggle('is-admin', on);
   // Вышли из режима настроек, стоя на его вкладке, — возвращаемся к текущей смене.
@@ -2634,8 +2642,14 @@ DB.onChange(renderApp);
 // Переход со старой версии: на этом устройстве уже шла смена — считаем, что оно в ней.
 state.joined = store.get('joined', undefined);
 if (state.joined === undefined) setJoined(!!DB.data.currentShift && canControl(DB.data.currentShift));
-// Вкладки режима настроек после перезагрузки недоступны.
-if (!CONFIG.tabs.some((t) => t.id === state.tab)) state.tab = 'current';
+// После обновления страницы возвращаем режим настроек, но только устройству, которое ведёт смену.
+if (adminSession.get() && !state.viewer && DB.data.currentShift && state.joined) {
+  state.admin = true;
+  document.body.classList.add('is-admin');
+} else {
+  adminSession.set(false);
+}
+if (!visibleTabs().some((t) => t.id === state.tab)) state.tab = 'current';
 renderApp();
 if ($('#screen-main').hidden) showStartScreen();
 
