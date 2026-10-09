@@ -244,6 +244,7 @@ $('#start-step-2').addEventListener('submit', async (e) => {
     d.currentShift = {
       id: uid(), deviceId: DEVICE_ID, master, number, type: formType,
       start: start.toISOString(),
+      openedAt: new Date().toISOString(), // реальное время открытия: смену могут начать раньше планового начала
       plannedEnd: plannedEnd(formType, start).toISOString(),
     };
   });
@@ -614,6 +615,7 @@ function eqStats(eqId, from) {
   const started = list.filter((b) => new Date(b.start) >= from);
   let downtime = 0;
   for (const b of list) {
+    if (isMaint(b)) continue; // обслуживание в простой не входит
     const s = Math.max(new Date(b.start).getTime(), from);
     const e = b.end ? new Date(b.end).getTime() : now;
     if (e > s) downtime += e - s;
@@ -721,10 +723,14 @@ function shiftBreakdowns(shift, end) {
   }
   own.sort((a, b) => a.start.localeCompare(b.start));
   carried.sort((a, b) => a.start.localeCompare(b.start));
-  // Простой в пределах смены по всем поломкам, которые её задели.
+  // Простой в пределах смены по всем поломкам, которые её задели. Считается только ремонт:
+  // обслуживание в простой не входит. Смену могли открыть раньше планового начала — тогда счёт идёт
+  // с реального времени открытия (openedAt), иначе простой стоял бы на нуле до наступления планового времени.
+  const from0 = new Date(Math.min(new Date(s), shift.openedAt ? new Date(shift.openedAt) : new Date(s)));
   let downtime = 0;
   for (const b of [...own, ...carried]) {
-    const from = Math.max(new Date(b.start), new Date(s));
+    if (isMaint(b)) continue;
+    const from = Math.max(new Date(b.start), from0);
     const to = Math.min(b.end ? new Date(b.end) : new Date(), end);
     if (to > from) downtime += to - from;
   }
@@ -799,7 +805,7 @@ function shiftCard(sh) {
   const { own, carried, downtime } = shiftBreakdowns(sh, end);
   const empty = !own.length && !carried.length;
   const open = !empty && state.histOpen.has(sh.id);
-  const inRepair = [...own, ...carried].filter((b) => b.status === 'repair').length;
+  const inRepair = [...own, ...carried].filter((b) => b.status === 'repair' && !isMaint(b)).length;
   const night = sh.type === 'night';
 
   const title = `
@@ -1247,15 +1253,17 @@ function currentShiftView() {
 // ---------- Сводка по станкам ----------
 // Станок стоит, если по нему есть поломка «в ремонте» (берём самую раннюю).
 
-function openBreakdowns() {
+function openBreakdowns(maint = false) {
   const map = new Map();
   for (const b of DB.data.breakdowns) {
-    if (b.status !== 'repair') continue;
+    if (b.status !== 'repair' || isMaint(b) !== maint) continue;
     const cur = map.get(b.equipmentId);
     if (!cur || b.start < cur.start) map.set(b.equipmentId, b);
   }
   return map;
 }
+// Станки на обслуживании (открытая запись вида «обслуживание»): не простой, но и не работают.
+const openMaintenance = () => openBreakdowns(true);
 
 function machineGrid() {
   const list = getEquipment();
@@ -1268,14 +1276,16 @@ function machineGrid() {
       </div>`;
   }
   const open = openBreakdowns();
+  const maintOpen = openMaintenance();
   const down = list.filter((e) => open.has(e.id)).length;
-  const working = list.length - down;
+  const maint = list.filter((e) => maintOpen.has(e.id) && !open.has(e.id)).length;
+  const working = list.length - down - maint;
   const shift = DB.data.currentShift;
   const downtime = shift ? fmtDuration(shiftBreakdowns(shift, new Date()).downtime) : null;
 
   const summary = `
     <p class="machines__summary">
-      <b>${working} из ${list.length}</b> ${plural(working, 'работает', 'работают', 'работают')}${down ? ` · <span class="machines__down">${down} ${plural(down, 'стоит', 'стоят', 'стоят')}</span>` : ''}
+      <b>${working} из ${list.length}</b> ${plural(working, 'работает', 'работают', 'работают')}${down ? ` · <span class="machines__down">${down} ${plural(down, 'стоит', 'стоят', 'стоят')}</span>` : ''}${maint ? ` · <span class="machines__maint">${maint} на обслуживании</span>` : ''}
       ${downtime ? ` · простой за смену <b data-shift-downtime>${downtime}</b>` : ''}
     </p>`;
 

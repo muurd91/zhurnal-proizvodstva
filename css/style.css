@@ -1140,6 +1140,7 @@ body.is-viewer #btn-edit { display: none !important; }
 .machines__summary { margin: 0 0 16px; font-size: 1.15em; }
 .machines__summary b { font-variant-numeric: tabular-nums; }
 .machines__down { color: var(--danger); font-weight: 700; }
+.machines__maint { color: var(--warning-text); font-weight: 700; }
 .machines__group + .machines__group { margin-top: 18px; }
 .machines {
   display: grid;
