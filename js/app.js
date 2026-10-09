@@ -548,12 +548,14 @@ function equipmentView() {
   const from = periodStart();
   const stats = new Map(list.map((e) => [e.id, eqStats(e.id, from)]));
   const all = [...stats.values()];
-  const broken = all.filter((s) => s.inRepair).length;
+  const repairN = all.filter((s) => s.inRepair && !isMaint(s.inRepair)).length;
+  const maintN = all.filter((s) => s.inRepair && isMaint(s.inRepair)).length;
 
   const tiles = `
     <div class="stat-row">
-      ${statTile('Работает', `${list.length - broken} из ${list.length}`)}
-      ${statTile('В ремонте', broken, broken ? 'bad' : '')}
+      ${statTile('Работает', `${list.length - repairN - maintN} из ${list.length}`)}
+      ${statTile('В ремонте', repairN, repairN ? 'bad' : '')}
+      ${maintN ? statTile('Обслуживание', maintN, 'maint') : ''}
       ${statTile(`Поломок · ${periodLabel()}`, all.reduce((n, s) => n + s.count, 0))}
       ${statTile(`Простой · ${periodLabel()}`, fmtDuration(all.reduce((n, s) => n + s.downtime, 0)))}
     </div>`;
@@ -607,7 +609,8 @@ function periodSwitch() {
 function eqStats(eqId, from) {
   const now = Date.now();
   const list = DB.data.breakdowns.filter((b) => b.equipmentId === eqId);
-  const inRepair = list.find((b) => b.status === 'repair') || null;
+  const open = list.filter((b) => b.status === 'repair');
+  const inRepair = open.find((b) => !isMaint(b)) || open[0] || null; // ремонт важнее обслуживания
   const started = list.filter((b) => new Date(b.start) >= from);
   let downtime = 0;
   for (const b of list) {
@@ -642,17 +645,18 @@ const statTile = (label, value, tone = '') => `
 function equipmentRow(e, s) {
   const open = state.eqOpen.has(e.id);
   const repair = !!s.inRepair;
+  const kind = !repair ? 'ok' : isMaint(s.inRepair) ? 'maintenance' : 'repair';
   return `
     <div class="eq-entry${open ? ' is-open' : ''}">
-      <button class="eq-row eq-row--${repair ? 'repair' : 'ok'}" data-eq="${e.id}" aria-expanded="${open}">
+      <button class="eq-row eq-row--${kind}" data-eq="${e.id}" aria-expanded="${open}">
         <span class="eq-row__name">
           <span class="bd-item__name">${escapeHtml(e.name)}</span>
           <span class="eq-row__sub">${repair ? escapeHtml(s.inRepair.reason) : e.inv ? `Инв. № ${escapeHtml(e.inv)}` : ''}</span>
         </span>
         <span class="eq-row__mark">${e.mark ? `<span class="mark-tag">${escapeHtml(e.mark)}</span>` : ''}</span>
         <span class="eq-row__status">
-          <span class="dot dot--${repair ? 'repair' : 'ok'}"></span>
-          ${repair ? `В ремонте · ${fmtDuration(Date.now() - new Date(s.inRepair.start))}` : 'Работает'}
+          <span class="dot dot--${kind}"></span>
+          ${repair ? `${kind === 'maintenance' ? 'Обслуживание' : 'В ремонте'} · ${fmtDuration(Date.now() - new Date(s.inRepair.start))}` : 'Работает'}
         </span>
         <span class="eq-row__nums">
           <span class="eq-row__num"><b>${s.count}</b><i> ${plural(s.count, 'поломка', 'поломки', 'поломок')}</i></span>
@@ -852,7 +856,7 @@ function breakdownRow(b, carried = false) {
       : `от смены · ${escapeHtml(b.master)}`;
   }
   return `
-    <button class="hist-row hist-row--${b.status}${carried ? ' hist-row--carried' : ''}" data-bd="${b.id}">
+    <button class="hist-row hist-row--${bdKey(b)}${carried ? ' hist-row--carried' : ''}" data-bd="${b.id}">
       <span class="hist-row__time">${carried ? `<small>${fmtDate(new Date(b.start)).slice(0, 5)}</small>` : ''}${fmtTime(new Date(b.start))}</span>
       <span class="hist-row__main">
         <span class="hist-row__name">${escapeHtml(equipmentName(b.equipmentId))}</span>
@@ -861,7 +865,7 @@ function breakdownRow(b, carried = false) {
       </span>
       <span class="hist-row__side">
         <span class="hist-row__dur"${done ? '' : ` data-since="${b.start}"`}>${dur}</span>
-        ${done ? '' : '<span class="bd-status bd-status--repair">В ремонте</span>'}
+        ${done ? '' : `<span class="bd-status bd-status--${bdKey(b)}">${bdStatusLabel(b)}</span>`}
       </span>
     </button>`;
 }
@@ -1171,7 +1175,15 @@ function saveEquipment(eq) {
 
 // ================= Поломки =================
 // Запись: { id, shiftId, master, equipmentId, start, reason, type,
-//           status: 'repair' | 'done', end, repairedBy }
+//           status: 'repair' | 'done', kind: 'repair' | 'maintenance', end, repairedBy }
+// status — открыта ('repair') или закрыта ('done'); kind — вид: ремонт (по умолчанию) или обслуживание.
+// Открытая запись любого вида имеет status 'repair': конец смены, передача и закрытие работают одинаково.
+const isMaint = (b) => !!b && b.kind === 'maintenance';
+// Ключ для класса и цвета: done | maintenance | repair
+const bdKey = (b) => (b.status === 'done' ? 'done' : isMaint(b) ? 'maintenance' : 'repair');
+const bdStatusLabel = (b) => (b.status === 'done'
+  ? (isMaint(b) ? 'Обслужено' : 'Отремонтировано')
+  : (isMaint(b) ? 'Обслуживание' : 'В ремонте'));
 
 const toLocalInput = (d) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -1192,10 +1204,10 @@ function breakdownCard(b, clickable = true, showEq = true) {
   const tag = clickable ? 'button' : 'div';
   const mark = DB.data.equipment.find((e) => e.id === b.equipmentId)?.mark;
   return `
-    <${tag} class="bd-item bd-item--${b.status}"${clickable ? ` data-bd="${b.id}"` : ''}>
+    <${tag} class="bd-item bd-item--${bdKey(b)}"${clickable ? ` data-bd="${b.id}"` : ''}>
       <span class="bd-item__head">
         <span class="bd-item__name">${showEq ? `${escapeHtml(equipmentName(b.equipmentId))}${mark ? ` <span class="bd-item__mark">${escapeHtml(mark)}</span>` : ''}` : escapeHtml(b.reason)}</span>
-        <span class="bd-status bd-status--${b.status}">${done ? 'Отремонтировано' : 'В ремонте'}</span>
+        <span class="bd-status bd-status--${bdKey(b)}">${bdStatusLabel(b)}</span>
       </span>
       ${showEq ? `<span class="bd-item__reason">${escapeHtml(b.reason)}</span>` : ''}
       <span class="bd-item__meta">
@@ -1205,7 +1217,7 @@ function breakdownCard(b, clickable = true, showEq = true) {
         <span>Простой: <b${done ? '' : ` data-since="${b.start}"`}>${dur}</b></span>
         <span>Мастер: <b>${escapeHtml(b.master)}</b></span>
         ${b.handovers?.length ? `<span>Передано сменам: <b>${b.handovers.length}</b></span>` : ''}
-        ${done ? `<span>Отремонтировал: <b>${escapeHtml(b.repairedBy)}</b></span>` : ''}
+        ${done ? `<span>${isMaint(b) ? 'Обслужил' : 'Отремонтировал'}: <b>${escapeHtml(b.repairedBy)}</b></span>` : ''}
       </span>
       ${done ? usedLine(b.used) : ''}
     </${tag}>`;
@@ -1292,6 +1304,7 @@ function openBreakdownForm(bd = null, eqId = null) {
   const curEq = eqList.find((e) => e.id === (bd ? bd.equipmentId : eqId));
   const master = bd ? bd.master : DB.data.currentShift?.master || '';
   let status = bd ? bd.status : 'repair';
+  let kind = isMaint(bd) ? 'maintenance' : 'repair'; // вид записи: ремонт или обслуживание
   let type = bd ? bd.type : '';
 
   const chips = (name, items, active) => items
@@ -1300,7 +1313,7 @@ function openBreakdownForm(bd = null, eqId = null) {
 
   const actions = [
     { label: 'Отмена' },
-    { label: 'Сохранить', primary: true, onClick: () => saveBreakdown(bd, { status, type }) },
+    { label: 'Сохранить', primary: true, onClick: () => saveBreakdown(bd, { status, type, kind }) },
   ];
 
   openModal(bd ? 'Поломка' : 'Добавить поломку', `
@@ -1332,6 +1345,7 @@ function openBreakdownForm(bd = null, eqId = null) {
       <div class="segmented" id="bd-status">
         <button type="button" class="segmented__btn" data-status="repair">В ремонте</button>
         <button type="button" class="segmented__btn" data-status="done">Ремонт завершён</button>
+        <button type="button" class="segmented__btn" data-status="maintenance">Обслуживание</button>
       </div>
     </div>
     <div class="bd-done" id="bd-done-fields">
@@ -1362,7 +1376,8 @@ function openBreakdownForm(bd = null, eqId = null) {
     sel.disabled = !g;
   };
   const renderStatus = () => {
-    document.querySelectorAll('#bd-status [data-status]').forEach((b) => b.classList.toggle('is-active', b.dataset.status === status));
+    const active = status === 'done' ? 'done' : kind;
+    document.querySelectorAll('#bd-status [data-status]').forEach((b) => b.classList.toggle('is-active', b.dataset.status === active));
     $('#bd-done-fields').hidden = status !== 'done';
   };
 
@@ -1379,12 +1394,14 @@ function openBreakdownForm(bd = null, eqId = null) {
   $('#bd-status').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-status]');
     if (!btn) return;
-    status = btn.dataset.status;
+    // «Ремонт завершён» закрывает запись (вид сохраняется); «В ремонте» и «Обслуживание» — открытая запись своего вида.
+    if (btn.dataset.status === 'done') status = 'done';
+    else { status = 'repair'; kind = btn.dataset.status; }
     renderStatus();
   });
 }
 
-function saveBreakdown(bd, { status, type }) {
+function saveBreakdown(bd, { status, type, kind = 'repair' }) {
   const error = (msg, field) => fieldError(field, msg, '#bd-error');
   const equipmentId = $('#bd-eq').value;
   const startVal = $('#bd-start').value;
@@ -1413,7 +1430,7 @@ function saveBreakdown(bd, { status, type }) {
   }
 
   const fields = {
-    equipmentId, reason, type, status,
+    equipmentId, reason, type, status, kind,
     start: start.toISOString(),
     end: end ? end.toISOString() : null,
     repairedBy,

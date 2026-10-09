@@ -201,6 +201,8 @@ button { cursor: pointer; }
   border-radius: calc(var(--radius) - 4px);
   background: transparent;
 }
+/* Состояние поломки: три варианта в узком окне — подпись может занять две строки, поэтому у кнопок есть вертикальные отступы */
+#bd-status .segmented__btn { padding: 6px 4px; line-height: 1.2; font-size: .94em; }
 .segmented__btn.is-active {
   background: var(--active-bg);
   color: var(--active-text);
@@ -447,11 +449,13 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   text-align: left;
 }
 .eq-row--repair { border-left-color: var(--danger); }
+.eq-row--maintenance { border-left-color: var(--status-maintenance); }
 @media (hover: hover) { .eq-row:hover { background: var(--surface-2); } }
 .eq-entry.is-open .eq-row { background: var(--surface-2); }
 .eq-row__name { display: grid; min-width: 0; }
 .eq-row__sub { font-size: .85em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eq-row--repair .eq-row__sub { color: var(--danger); }
+.eq-row--maintenance .eq-row__sub { color: var(--warning-text); }
 .eq-row__mark { min-width: 0; }
 /* Маркировка — отдельный столбец: метка в рамке, все метки начинаются с одного края */
 .mark-tag {
@@ -542,6 +546,8 @@ body {
 }
 .stat__label { font-size: .8em; color: var(--muted); }
 .stat__value { font-size: 1.5em; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat--maint { border-color: var(--warning-line); }
+.stat--maint .stat__value::before { content: "◆ "; color: var(--warning-text); font-size: .7em; vertical-align: middle; }
 .stat--bad { border-color: var(--danger); }
 .stat--bad .stat__value::before { content: "■ "; color: var(--danger); font-size: .7em; vertical-align: middle; }
 
@@ -642,6 +648,7 @@ body {
   text-align: left;
 }
 .hist-row--repair { border-left-color: var(--danger); }
+.hist-row--maintenance { border-left-color: var(--warning-line); }
 @media (hover: hover) { .hist-row:hover { background: var(--surface-2); } }
 .hist-row__time { display: grid; font-weight: 700; font-variant-numeric: tabular-nums; }
 .hist-row__time small { font-size: .8em; font-weight: 600; }
@@ -1063,6 +1070,7 @@ body.is-viewer #btn-edit { display: none !important; }
   text-align: left;
 }
 .bd-item--done { border-left-color: transparent; }
+.bd-item--maintenance { border-left-color: var(--warning-line); }
 @media (hover: hover) { button.bd-item:hover { border-color: var(--accent); } }
 .bd-item__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; }
 .bd-item__head > :first-child { flex: 1 1 160px; }
@@ -1089,6 +1097,7 @@ body.is-viewer #btn-edit { display: none !important; }
   font-weight: 700;
 }
 .bd-status--repair { background: var(--danger-fill); color: var(--on-danger-fill); }
+.bd-status--maintenance { background: var(--warning); color: var(--on-warning); }
 .bd-status--wait { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
 .bd-status--urgent { background: var(--warning); color: var(--on-warning); }
 
