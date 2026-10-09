@@ -269,8 +269,8 @@ html, body { overflow: hidden; overscroll-behavior: none; }
   grid-area: end;
   display: grid;
   align-content: center;
-  justify-items: end;
-  gap: 8px;
+  justify-items: center; /* подпись сохранения строго по центру кнопки */
+  gap: 12px;
 }
 .btn--outline { background: transparent; border: 2px solid var(--text); font-weight: 600; white-space: nowrap; }
 @media (hover: hover) { #btn-end-shift:hover { border-color: var(--danger); color: var(--danger); } }
