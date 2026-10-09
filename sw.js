@@ -4,7 +4,7 @@
 //
 // При любом изменении файлов приложения поднимать VERSION — иначе планшет будет держать старую копию.
 // Новый файл manuals/kb-*.js — добавить в SHELL.
-const VERSION = 'v8';
+const VERSION = 'v9';
 const CACHE = `jp-shell-${VERSION}`;
 
 const SHELL = [
@@ -36,7 +36,11 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 // Старые версии кэша удаляем.
@@ -55,7 +59,7 @@ self.addEventListener('fetch', (e) => {
   // Страница — «сначала сеть»: обновления приходят сразу, без сети открывается сохранённая копия.
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-cache' })
         .then((res) => {
           const copy = res.clone(); // копию — сразу, пока ответ не отдан странице
           if (res.ok) caches.open(CACHE).then((c) => c.put('index.html', copy));
@@ -69,7 +73,7 @@ self.addEventListener('fetch', (e) => {
   // Остальное — из кэша сразу, а в фоне подтягиваем свежую версию на следующий раз.
   e.respondWith(
     caches.match(req).then((cached) => {
-      const fresh = fetch(req)
+      const fresh = fetch(req, { cache: 'no-cache' })
         .then((res) => {
           const copy = res.clone();
           if (res.ok) caches.open(CACHE).then((c) => c.put(req, copy));
