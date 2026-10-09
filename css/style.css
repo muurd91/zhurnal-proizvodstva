@@ -75,7 +75,11 @@ button { cursor: pointer; }
 .muted { color: var(--muted); }
 .error { color: var(--danger); margin: 0; }
 
-.screen { height: 100dvh; }
+/* Экран прибит к видимой области окна. Так он не зависит от поддержки единицы dvh и от панелей браузера:
+   иначе в старом браузере (WebView, Samsung Internet) высота «плыла» по содержимому, страница
+   прокручивалась, а кнопка добавления и «Настройки» уезжали за нижний край. Прокручиваются только панели внутри. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+.screen { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
 /* Карточка по центру, но если она выше экрана (низкий планшет, открытая клавиатура) —
    прокручивается целиком: auto-отступы схлопываются, и верх не обрезается. */
 .screen--center {
@@ -1146,7 +1150,7 @@ body.is-viewer #btn-edit { display: none !important; }
 /* ================= Модальное окно ================= */
 .modal {
   position: fixed;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -1157,6 +1161,7 @@ body.is-viewer #btn-edit { display: none !important; }
    полоса прокрутки остаётся внутри окна, а не на его скруглённом краю. */
 .modal__card {
   width: min(440px, 100%);
+  max-height: calc(100vh - 32px);  /* запасное значение для браузеров без dvh */
   max-height: calc(100dvh - 32px);
   overflow: hidden;
   display: flex;
@@ -1263,6 +1268,13 @@ body.is-viewer #btn-edit { display: none !important; }
   .tab { min-height: 48px; }
   .nav__tabs { gap: 4px; }
   .app__nav { padding-top: 2vh; }
+}
+
+/* Очень низкий экран (планшет с открытой панелью и вкладками браузера, ~450 px): меню целиком без прокрутки */
+@media (max-height: 500px) {
+  .tab { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+  .nav__tabs { gap: 3px; }
+  .app__nav { padding-top: 0; }
 }
 
 /* Большие мониторы: держим пропорции ноутбука, не растягиваем на всю ширину */
