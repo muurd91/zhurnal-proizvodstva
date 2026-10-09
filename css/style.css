@@ -590,6 +590,13 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   white-space: nowrap;
 }
 
+/* Режим редактирования: рядом с шапкой смены — корзина (у идущей смены её нет) */
+.hist-headrow { display: flex; align-items: stretch; }
+.hist-headrow > .hist-head { flex: 1; min-width: 0; width: auto; }
+.hist-headrow > .trash { border-width: 0 0 0 1px; border-color: var(--border); border-radius: 0; background: var(--surface-2); }
+.hist-shift.is-open .hist-headrow { border-bottom: 1px solid var(--border); }
+.hist-shift.is-open .hist-headrow > .hist-head { border-bottom: 0; }
+
 /* Строки поломок: время | станок и причина | длительность (+ «В ремонте» только у незакрытых) */
 .hist-rows > * + * { border-top: 1px solid var(--border); }
 .hist-rows > .bd-wrap { align-items: center; padding-right: 8px; }

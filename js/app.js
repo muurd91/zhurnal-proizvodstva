@@ -484,7 +484,7 @@ const FAB_TITLES = {
 // Что можно менять во вкладке в режиме настроек.
 const EDIT_HINTS = {
   current:   'Редактирование и удаление поломок.',
-  history:   'Редактирование и удаление поломок.',
+  history:   'Редактирование и удаление поломок и смен.',
   equipment: 'Добавление и редактирование подгрупп и оборудования.',
   repair:    'Редактирование и удаление заявок.',
   warehouse: 'Редактирование подгрупп и типов запчастей.',
@@ -825,9 +825,12 @@ function shiftCard(sh) {
     : `<button class="hist-head" data-hist="${sh.id}" aria-expanded="${open}">${title}${aside}${meta}${summary}</button>`;
 
   const rows = (list, isCarried) => list.map((b) => withTrash(breakdownRow(b, isCarried), b)).join('');
+  const headBlock = state.admin && state.editing && !sh.current
+    ? `<div class="hist-headrow">${head}<button class="trash" data-del-shift="${sh.id}" title="Удалить смену" aria-label="Удалить смену">${ICONS.trash}</button></div>`
+    : head;
   return `
     <section class="hist-shift${sh.current ? ' hist-shift--current' : ''}${empty ? ' hist-shift--empty' : ''}${open ? ' is-open' : ''}">
-      ${head}
+      ${headBlock}
       ${open && own.length ? `<div class="hist-rows">${rows(own, false)}</div>` : ''}
       ${open && carried.length ? `
         <div class="hist-carried">↪ Перешли с прошлых смен · ${carried.length}</div>
@@ -1042,6 +1045,9 @@ $('#panel').addEventListener('click', (e) => {
     if (state.histOpen.has(id)) state.histOpen.delete(id); else state.histOpen.add(id);
     return renderTab();
   }
+
+  const delShift = e.target.closest('[data-del-shift]');
+  if (delShift) return confirmDeleteShift(DB.data.shifts.find((x) => x.id === delShift.dataset.delShift));
 
   const del = e.target.closest('[data-del]');
   if (del) {
@@ -1497,6 +1503,38 @@ function confirmDeleteBreakdown(bd) {
       onClick: () => DB.update((d) => {
         applyUsage(d, bd.used || [], []);
         d.breakdowns = d.breakdowns.filter((x) => x.id !== bd.id);
+      }),
+    },
+  ]);
+}
+
+// Удаление смены из истории: уходят и её собственные поломки (списанные запчасти возвращаются на склад).
+// Смену с поломкой, которая ещё в ремонте, удалить нельзя: станок «выздоровел» бы сам собой.
+function confirmDeleteShift(sh) {
+  if (!sh) return;
+  const own = DB.data.breakdowns.filter((b) => b.shiftId === sh.id);
+  const inRepair = own.filter((b) => b.status === 'repair');
+  const label = `${SETTINGS().shiftTypes[sh.type]?.label || ''} смена · ${shiftDays(new Date(sh.start), new Date(sh.end))}`;
+  if (inRepair.length) {
+    openModal('Смену удалить нельзя', `
+      <p>В смене <b>${escapeHtml(label)}</b> есть поломки, которые ещё в ремонте:
+         ${inRepair.map((b) => `<b>${escapeHtml(equipmentName(b.equipmentId))}</b>`).join(', ')}.</p>
+      <p class="muted">Сначала закройте ремонт или удалите эти поломки, потом удалите смену.</p>`,
+      [{ label: 'Понятно', primary: true }]);
+    return;
+  }
+  const returns = own.some((b) => (b.used || []).some((u) => u.partId));
+  openModal('Удалить смену?', `
+    <p>Смена <b>${escapeHtml(label)}</b>, мастер <b>${escapeHtml(sh.master)}</b>${sh.number ? `, № ${escapeHtml(sh.number)}` : ''},
+       будет удалена без возможности восстановления.</p>
+    <p class="muted">Вместе с ней удалятся её поломки: ${own.length}.${returns ? ' Списанные ими запчасти вернутся на склад.' : ''}</p>`, [
+    { label: 'Отмена' },
+    {
+      label: 'Удалить', danger: true,
+      onClick: () => DB.update((d) => {
+        for (const b of own) applyUsage(d, b.used || [], []);
+        d.breakdowns = d.breakdowns.filter((b) => b.shiftId !== sh.id);
+        d.shifts = d.shifts.filter((x) => x.id !== sh.id);
       }),
     },
   ]);
