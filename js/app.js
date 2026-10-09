@@ -567,7 +567,7 @@ function equipmentView() {
   // Заголовки колонок — первой строкой в карточке каждой группы.
   const head = `
     <div class="eq-head">
-      <span>Оборудование</span><span>Состояние</span><span>Поломок</span><span>Простой</span><span>Последняя</span><span></span>
+      <span>Оборудование</span><span>Маркировка</span><span>Состояние</span><span>Поломок</span><span>Простой</span><span>Последняя</span><span></span>
     </div>`;
 
   return periodSwitch() + tiles + getGroups().map((g) => `
@@ -646,9 +646,10 @@ function equipmentRow(e, s) {
     <div class="eq-entry${open ? ' is-open' : ''}">
       <button class="eq-row eq-row--${repair ? 'repair' : 'ok'}" data-eq="${e.id}" aria-expanded="${open}">
         <span class="eq-row__name">
-          <span class="bd-item__name">${escapeHtml(e.name)}${e.mark ? ` <span class="bd-item__mark">${escapeHtml(e.mark)}</span>` : ''}</span>
+          <span class="bd-item__name">${escapeHtml(e.name)}</span>
           <span class="eq-row__sub">${repair ? escapeHtml(s.inRepair.reason) : e.inv ? `Инв. № ${escapeHtml(e.inv)}` : ''}</span>
         </span>
+        <span class="eq-row__mark">${e.mark ? `<span class="mark-tag">${escapeHtml(e.mark)}</span>` : ''}</span>
         <span class="eq-row__status">
           <span class="dot dot--${repair ? 'repair' : 'ok'}"></span>
           ${repair ? `В ремонте · ${fmtDuration(Date.now() - new Date(s.inRepair.start))}` : 'Работает'}

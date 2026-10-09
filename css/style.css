@@ -417,7 +417,7 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
 /* Список оборудования: одна строка — один станок, колонки выровнены по всему списку */
 .eq-head, .eq-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px 90px 120px 140px 24px;
+  grid-template-columns: minmax(0, 1fr) 110px 190px 90px 120px 140px 24px;
   align-items: center;
   gap: 12px;
 }
@@ -429,7 +429,7 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   font-weight: 600;
   color: var(--muted);
 }
-.eq-head span:nth-child(n+3):nth-child(-n+4) { text-align: right; }
+.eq-head span:nth-child(n+4):nth-child(-n+5) { text-align: right; }
 .eq-rows {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -452,9 +452,35 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
 .eq-row__name { display: grid; min-width: 0; }
 .eq-row__sub { font-size: .85em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eq-row--repair .eq-row__sub { color: var(--danger); }
+.eq-row__mark { min-width: 0; }
+/* Маркировка — отдельный столбец: метка в рамке, все метки начинаются с одного края */
+.mark-tag {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: .85em;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 .eq-row__status { display: flex; align-items: center; gap: 8px; font-size: .9em; }
+/* Цвета статусов — в одном месте: работает — зелёный, в ремонте — красный, обслуживание — жёлтый.
+   Форма маркера дублирует цвет (не только цветом): ● работает, ■ ремонт, ◆ обслуживание. */
+/* На body, а не на :root: ночная тема (body.theme-night) переопределяет --ok/--danger/--warning именно там. */
+body {
+  --status-ok: var(--ok);
+  --status-repair: var(--danger);
+  --status-maintenance: var(--warning);
+}
 .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
-.dot--repair { background: var(--danger); border-radius: 2px; } /* стоит — квадрат ■ */
+.dot--ok { background: var(--status-ok); }
+.dot--repair { background: var(--status-repair); border-radius: 2px; }
+.dot--maintenance { background: var(--status-maintenance); border-radius: 2px; transform: rotate(45deg); }
 .eq-row__nums { display: contents; }
 .eq-row__num { text-align: right; font-variant-numeric: tabular-nums; }
 .eq-row__num b { font-weight: 600; }
@@ -478,11 +504,12 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   .stat-row:not(.stat-row--compact) { grid-template-columns: 1fr 1fr; }
   .eq-head { display: none; }
   .eq-row {
-    grid-template-columns: minmax(0, 1fr) auto 22px;
-    grid-template-areas: "name status chev" "nums nums nums";
+    grid-template-columns: minmax(0, 1fr) 64px 190px 22px; /* фиксированные столбцы: метки стоят строго друг под другом */
+    grid-template-areas: "name mark status chev" "nums nums nums nums";
     row-gap: 6px;
   }
   .eq-row__name { grid-area: name; }
+  .eq-row__mark { grid-area: mark; }
   .eq-row__status { grid-area: status; }
   .eq-row__chev { grid-area: chev; }
   .eq-row__nums { grid-area: nums; display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: .9em; }
