@@ -276,7 +276,14 @@ button { cursor: pointer; }
   gap: 12px;
 }
 .btn--outline { background: transparent; border: 2px solid var(--text); font-weight: 600; white-space: nowrap; }
-@media (hover: hover) { #btn-end-shift:hover { border-color: var(--danger); color: var(--danger); } }
+/* «Закончить смену» — опасное действие: красная рамка и текст сразу, без hover (на планшете его нет).
+   Подтверждение — в окне. В режиме зрителя это кнопка «Выйти из просмотра»: она не опасная и остаётся нейтральной. */
+#btn-end-shift { border-color: var(--danger); color: var(--danger); }
+#btn-end-shift:active { background: var(--danger-soft); }
+@media (hover: hover) { #btn-end-shift:hover { background: var(--danger-soft); } }
+body.is-viewer #btn-end-shift { border-color: var(--text); color: var(--text); }
+body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
+@media (hover: hover) { body.is-viewer #btn-end-shift:hover { background: var(--surface-2); } }
 /* Индикатор сохранения: не меньше 14px, читается на бликующем экране. Состояние различается не только цветом —
    у каждого свой значок и текст: сохранено — зелёный ✓, идёт сохранение — серый ↻, ошибка или нет связи — красный жирный ▲. */
 .save-status { font-size: max(14px, .9em); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; cursor: pointer; }
