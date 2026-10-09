@@ -1238,14 +1238,18 @@ function breakdownCard(b, clickable = true, showEq = true) {
 function currentShiftView() {
   const shiftId = DB.data.currentShift?.id;
   const all = DB.data.breakdowns;
-  const inRepair = all.filter((b) => b.status === 'repair').sort((a, b) => a.start.localeCompare(b.start));
+  const open = all.filter((b) => b.status === 'repair').sort((a, b) => a.start.localeCompare(b.start));
   const doneHere = all.filter((b) => b.status === 'done' && b.shiftId === shiftId).sort((a, b) => b.start.localeCompare(a.start));
+  // Ремонт и обслуживание — отдельные блоки: обслуживание не считается в «В ремонте».
+  const inRepair = open.filter((b) => !isMaint(b)), inMaint = open.filter(isMaint);
+  const doneRepair = doneHere.filter((b) => !isMaint(b)), doneMaint = doneHere.filter(isMaint);
 
   const section = (title, list) => list.length
     ? `<section class="bd-section"><h3 class="eq-group__title">${title} · ${list.length}</h3><div class="bd-list">${list.map((b) => withTrash(breakdownCard(b), b)).join('')}</div></section>`
     : '';
-  const list = inRepair.length || doneHere.length
-    ? section('В ремонте', inRepair) + section('Отремонтировано в эту смену', doneHere)
+  const list = open.length || doneHere.length
+    ? section('В ремонте', inRepair) + section('На обслуживании', inMaint)
+      + section('Отремонтировано в эту смену', doneRepair) + section('Обслужено в эту смену', doneMaint)
     : '<p class="muted bd-none">Поломок в эту смену не было.</p>';
   return machineGrid() + list;
 }
