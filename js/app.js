@@ -31,6 +31,15 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 const OTHER = '__other__';
 
+// Идентификатор этого устройства. Смену ведут только с того устройства, где её начали;
+// остальные видят её как зрители. Смена без deviceId (начата старой версией) доступна всем.
+const DEVICE_ID = (() => {
+  let id = store.get('device', null);
+  if (!id) { id = uid(); store.set('device', id); }
+  return id;
+})();
+const canControl = (shift) => !shift || !shift.deviceId || shift.deviceId === DEVICE_ID;
+
 // Данные смен (мастера, номера, время) — из файла данных, меняются во вкладке «Данные смен».
 const SETTINGS = () => DB.data.settings;
 
@@ -82,11 +91,20 @@ function showStartScreen() {
   $('#start-step-1').hidden = false;
   $('#start-step-2').hidden = true;
   document.body.classList.remove('is-viewer');
-  const shift = DB.data.currentShift;
-  $('#btn-take-shift').textContent = shift ? 'Продолжить смену' : 'Заступить на смену';
-  $('#start-running').hidden = !shift;
-  if (shift) $('#start-running').innerHTML = `Идёт ${shiftTitle(shift).toLowerCase()} · мастер <b>${escapeHtml(shift.master)}</b>`;
+  renderStartRunning();
   refreshStartScreen();
+}
+
+// «Идёт дневная смена № 1 · мастер Иванов». На чужом устройстве кнопка остаётся «Заступить»: нажатие даёт ошибку.
+function renderStartRunning() {
+  const shift = DB.data.currentShift;
+  const mine = shift && canControl(shift);
+  $('#btn-take-shift').textContent = mine ? 'Продолжить смену' : 'Заступить на смену';
+  $('#start-running').hidden = !shift;
+  if (shift) {
+    $('#start-running').innerHTML = `Идёт ${shiftTitle(shift).toLowerCase()} · мастер <b>${escapeHtml(shift.master)}</b>` +
+      (mine ? '' : '<br><span class="muted">начата на другом устройстве</span>');
+  }
 }
 
 // Смена по расписанию и стоящие станки на стартовом экране; часы — в tickClock.
@@ -132,8 +150,56 @@ function renderTypeSwitch() {
   $('#f-start').textContent = `${fmtDate(s)}, ${fmtTime(s)}`;
 }
 
-$('#btn-take-shift').addEventListener('click', () => {
-  if (!DB.data.currentShift) return openShiftForm();
+// Перед стартом подтягиваем свежие данные из OneDrive, чтобы не пропустить смену, начатую на другом устройстве.
+// Нет связи — работаем с тем, что есть на устройстве: смену на планшете нужно уметь начать и без сети.
+async function freshen() {
+  if (!OneDrive.info().connected) return;
+  await Promise.race([OneDrive.syncNow(), new Promise((resolve) => setTimeout(resolve, 5000))]);
+}
+
+// Ошибка: смена идёт на другом устройстве. Выход — режим зрителя (или «Забрать смену» по паролю).
+function showBusyError(shift, title = 'Смена уже идёт на другом устройстве') {
+  openModal(title, `
+    <p>Сейчас идёт <b>${escapeHtml(shiftTitle(shift).toLowerCase())}</b>, мастер <b>${escapeHtml(shift.master)}</b>.
+       Начать вторую смену нельзя: её ведут только с того устройства, где она начата.</p>
+    <p class="muted">Вы можете открыть журнал в режиме зрителя.</p>`, [
+    { label: 'Закрыть' },
+    { label: 'Забрать смену', danger: true, onClick: () => { openTakeover(); return false; } },
+    { label: 'Режим зрителя', primary: true, onClick: () => setViewer(true) },
+  ]);
+}
+
+// Запасной выход, если устройство со сменой недоступно (сломано, потеряно): смена переходит на это устройство.
+function openTakeover() {
+  openModal('Забрать смену на это устройство?', `
+    <p>Используйте, только если устройство, где начата смена, недоступно. Смена продолжится здесь со всеми записями,
+       а на прежнем устройстве станет доступна только для просмотра.</p>
+    <label class="field"><span class="field__label">Логин</span><input id="m-login" autocomplete="off"></label>
+    <label class="field"><span class="field__label">Пароль</span><input id="m-pass" type="password"></label>
+    <p class="error" id="m-error" hidden>Неверный логин или пароль</p>`, [
+    { label: 'Отмена' },
+    {
+      label: 'Забрать',
+      danger: true,
+      onClick: () => {
+        const ok = $('#m-login').value === CONFIG.admin.login && $('#m-pass').value === CONFIG.admin.password;
+        if (!ok) { $('#m-error').hidden = false; return false; }
+        setJoined(true);
+        DB.update((d) => { if (d.currentShift) d.currentShift.deviceId = DEVICE_ID; });
+      },
+    },
+  ]);
+  $('#m-login').focus();
+}
+
+$('#btn-take-shift').addEventListener('click', async () => {
+  const btn = $('#btn-take-shift');
+  btn.disabled = true;
+  try { await freshen(); } finally { btn.disabled = false; }
+  const shift = DB.data.currentShift;
+  renderStartRunning();
+  if (!shift) return openShiftForm();
+  if (!canControl(shift)) return showBusyError(shift);
   setJoined(true);
   renderApp();
 });
@@ -156,19 +222,27 @@ $('#f-type').addEventListener('click', (e) => {
   renderTypeSwitch();
 });
 
-$('#start-step-2').addEventListener('submit', (e) => {
+$('#start-step-2').addEventListener('submit', async (e) => {
   e.preventDefault();
   const sel = $('#f-master').value;
   const master = sel === OTHER ? $('#f-master-other').value.trim() : sel;
   if (!master) return;
   const number = $('#f-number').value || '';
   if (SETTINGS().shiftNumbers.length && !number) return;
+  // Пока заполняли форму, смену могли начать на другом устройстве.
+  await freshen();
+  const running = DB.data.currentShift;
+  if (running) {
+    showStartScreen();
+    if (!canControl(running)) showBusyError(running);
+    return;
+  }
   const start = plannedStart(formType);
   setJoined(true);
   DB.update((d) => {
     // Плановый конец фиксируем при старте: правка расписания не должна сдвигать уже идущую смену.
     d.currentShift = {
-      id: uid(), master, number, type: formType,
+      id: uid(), deviceId: DEVICE_ID, master, number, type: formType,
       start: start.toISOString(),
       plannedEnd: plannedEnd(formType, start).toISOString(),
     };
@@ -2544,15 +2618,22 @@ function setJoined(on) {
 // переключаемся; поменялись данные — перерисовываем. Зритель остаётся в основном окне и без смены.
 function renderApp() {
   applyTheme();
-  if (!DB.data.currentShift && state.joined) setJoined(false);
-  if (state.viewer || (DB.data.currentShift && state.joined)) showMainScreen();
+  const shift = DB.data.currentShift;
+  if (!shift && state.joined) setJoined(false);
+  // Смену забрали или начали на другом устройстве — отсюда её больше не ведут.
+  if (shift && state.joined && !canControl(shift)) {
+    setJoined(false);
+    showBusyError(shift, 'Смена передана другому устройству');
+  }
+  if (state.viewer || (shift && state.joined)) showMainScreen();
   else if (!$('#screen-main').hidden) showStartScreen();
+  else if (!$('#start-step-1').hidden) { renderStartRunning(); refreshStartScreen(); }
 }
 DB.onChange(renderApp);
 
 // Переход со старой версии: на этом устройстве уже шла смена — считаем, что оно в ней.
 state.joined = store.get('joined', undefined);
-if (state.joined === undefined) setJoined(!!DB.data.currentShift);
+if (state.joined === undefined) setJoined(!!DB.data.currentShift && canControl(DB.data.currentShift));
 // Вкладки режима настроек после перезагрузки недоступны.
 if (!CONFIG.tabs.some((t) => t.id === state.tab)) state.tab = 'current';
 renderApp();

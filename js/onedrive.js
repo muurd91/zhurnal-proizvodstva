@@ -34,6 +34,7 @@ const OneDrive = (() => {
   let status = 'idle'; // 'idle' | 'syncing' | 'offline' | 'cloudError'
   let lastError = '';
   let running = false;
+  let runPromise = null;
   let rerun = false;
   let overwrite = false; // следующая отправка заменяет файл целиком (загрузка файла данных вручную)
   let timer = null;
@@ -251,9 +252,15 @@ const OneDrive = (() => {
     throw fail('cloud', 'Не удалось согласовать изменения с другим устройством. Попробуйте ещё раз.');
   }
 
-  async function sync() {
-    if (!connected()) return;
-    if (running) { rerun = true; return; }
+  // Обещание выполняется, когда синхронизация закончилась (если уже идёт — дожидается её).
+  function sync() {
+    if (!connected()) return Promise.resolve();
+    if (running) { rerun = true; return runPromise; }
+    runPromise = doSync();
+    return runPromise;
+  }
+
+  async function doSync() {
     running = true;
     status = 'syncing';
     emit();
