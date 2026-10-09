@@ -171,25 +171,17 @@ function showBusyError(shift, title = 'Смена уже идёт на друг�
 
 // Запасной выход, если устройство со сменой недоступно (сломано, потеряно): смена переходит на это устройство.
 function openTakeover() {
-  openModal('Забрать смену на это устройство?', `
-    <p>Используйте, только если устройство, где начата смена, недоступно. Смена продолжится здесь со всеми записями,
-       а на прежнем устройстве станет доступна только для просмотра.</p>
-    <label class="field"><span class="field__label">Логин</span><input id="m-login" autocomplete="off"></label>
-    <label class="field"><span class="field__label">Пароль</span><input id="m-pass" type="password"></label>
-    <p class="error" id="m-error" hidden>Неверный логин или пароль</p>`, [
-    { label: 'Отмена' },
-    {
-      label: 'Забрать',
-      danger: true,
-      onClick: () => {
-        const ok = $('#m-login').value === CONFIG.admin.login && $('#m-pass').value === CONFIG.admin.password;
-        if (!ok) { $('#m-error').hidden = false; return false; }
-        setJoined(true);
-        DB.update((d) => { if (d.currentShift) d.currentShift.deviceId = DEVICE_ID; });
-      },
+  askAdmin({
+    title: 'Забрать смену на это устройство?',
+    intro: `<p>Используйте, только если устройство, где начата смена, недоступно. Смена продолжится здесь со всеми записями,
+       а на прежнем устройстве станет доступна только для просмотра.</p>`,
+    label: 'Забрать',
+    danger: true,
+    onOk: () => {
+      setJoined(true);
+      DB.update((d) => { if (d.currentShift) d.currentShift.deviceId = DEVICE_ID; });
     },
-  ]);
-  $('#m-login').focus();
+  });
 }
 
 $('#btn-take-shift').addEventListener('click', async () => {
@@ -2439,23 +2431,30 @@ $('#btn-settings').addEventListener('click', () => {
   $('#btn-import').addEventListener('click', () => $('#file-import').click());
 });
 
-function openLogin() {
-  openModal('Вход в режим настроек', `
+// Окно проверки логина и пароля режима настроек. onOk вызывается только при верных данных;
+// он не должен возвращать false, иначе окно не закроется.
+function askAdmin({ title, intro = '', label, danger = false, onOk }) {
+  openModal(title, `${intro}
     <label class="field"><span class="field__label">Логин</span><input id="m-login" autocomplete="off"></label>
     <label class="field"><span class="field__label">Пароль</span><input id="m-pass" type="password"></label>
     <p class="error" id="m-error" hidden>Неверный логин или пароль</p>`, [
     { label: 'Отмена' },
     {
-      label: 'Войти',
-      primary: true,
+      label,
+      primary: !danger,
+      danger,
       onClick: () => {
         const ok = $('#m-login').value === CONFIG.admin.login && $('#m-pass').value === CONFIG.admin.password;
         if (!ok) { $('#m-error').hidden = false; return false; }
-        setAdmin(true);
+        onOk();
       },
     },
   ]);
   $('#m-login').focus();
+}
+
+function openLogin() {
+  askAdmin({ title: 'Вход в режим настроек', label: 'Войти', onOk: () => setAdmin(true) });
 }
 
 // Загрузка файла данных: проверяем, показываем что внутри и только после подтверждения заменяем.
