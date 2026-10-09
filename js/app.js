@@ -1260,7 +1260,7 @@ function currentShiftView() {
   return machineGrid() + list;
 }
 
-// ---------- Сетка станков ----------
+// ---------- Сводка по станкам ----------
 // Станок стоит, если по нему есть поломка «в ремонте» (берём самую раннюю).
 
 function openBreakdowns() {
@@ -1295,7 +1295,8 @@ function machineGrid() {
       ${downtime ? ` · простой за смену <b data-shift-downtime>${downtime}</b>` : ''}
     </p>`;
 
-  return `<div class="machines-wrap">${summary}${machineGroups((e) => machineTile(e, open.get(e.id)))}</div>`;
+  // Перечня станков на «Смене» нет: только сводка и кнопка «Остановка» (станок выбирается в её форме).
+  return `<div class="machines-wrap">${summary}</div>`;
 }
 
 // Группы станков в общем порядке; tile(e) рисует плитку. Используется на «Смене» и в окне выбора станка.
