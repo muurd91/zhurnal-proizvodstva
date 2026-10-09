@@ -1069,15 +1069,6 @@ $('#panel').addEventListener('click', (e) => {
   const bd = e.target.closest('[data-bd]');
   if (bd) return openBreakdownForm(DB.data.breakdowns.find((x) => x.id === bd.dataset.bd));
 
-  // Плитка станка: стоит — открываем его поломку, работает — форму новой остановки.
-  const machine = e.target.closest('[data-machine]');
-  if (machine) {
-    const open = machine.dataset.machineBd;
-    return open
-      ? openBreakdownForm(DB.data.breakdowns.find((x) => x.id === open))
-      : openBreakdownForm(null, machine.dataset.machine);
-  }
-
   const go = e.target.closest('[data-goto]');
   if (go) return goTab(go.dataset.goto);
 
@@ -1220,31 +1211,7 @@ function breakdownCard(b, clickable = true, showEq = true) {
     </${tag}>`;
 }
 
-// «＋ Остановка»: сначала выбор станка плитками (тот же порядок, что на «Смене»).
-// Стоящие станки видны, но выбрать их нельзя — по ним уже открыта поломка.
-function openMachinePicker() {
-  if (!getEquipment().length) return openBreakdownForm(); // там же подсказка, что перечень пуст
-  const open = openBreakdowns();
-  openModal('Какой станок остановился?', `
-    <div class="machines--pick">
-      ${machineGroups((e) => {
-        const down = open.has(e.id);
-        return `
-          <button type="button" class="machine${down ? ' machine--down' : ''}" data-pick="${e.id}"${down ? ' disabled' : ''}>
-            <span class="machine__name">${escapeHtml(e.name)}</span>
-            ${e.mark ? `<span class="machine__mark">${escapeHtml(e.mark)}</span>` : ''}
-            ${down ? '<span class="machine__reason"><span class="sym" aria-hidden="true">■</span> уже стоит</span>' : ''}
-          </button>`;
-      })}
-    </div>`, [{ label: 'Отмена' }], { wide: true });
-}
-
-$('#modal').addEventListener('click', (e) => {
-  const pick = e.target.closest('[data-pick]');
-  if (pick && !pick.disabled) openBreakdownForm(null, pick.dataset.pick);
-});
-
-// Текущая смена: сетка станков, ниже — всё, что ещё в ремонте (в том числе с прошлых смен), и поломки этой смены.
+// Текущая смена: сводка по станкам, ниже — всё, что ещё в ремонте (в том числе с прошлых смен), и поломки этой смены.
 function currentShiftView() {
   const shiftId = DB.data.currentShift?.id;
   const all = DB.data.breakdowns;
@@ -1299,40 +1266,11 @@ function machineGrid() {
   return `<div class="machines-wrap">${summary}</div>`;
 }
 
-// Группы станков в общем порядке; tile(e) рисует плитку. Используется на «Смене» и в окне выбора станка.
-const machineGroups = (tile) => getGroups().map((g) => `
-  <section class="machines__group">
-    <h3 class="eq-group__title">${escapeHtml(g)}</h3>
-    <div class="machines">
-      ${getEquipment().filter((e) => e.group === g).sort(byPos).map(tile).join('')}
-    </div>
-  </section>`).join('');
-
-// Плитка станка. Работает — нейтральная, без подписи (норму не подписываем);
-// стоит — красная, с причиной и таймером простоя.
-function machineTile(e, bd) {
-  const mark = e.mark ? `<span class="machine__mark">${escapeHtml(e.mark)}</span>` : '';
-  if (!bd) {
-    return `
-      <button class="machine" data-machine="${e.id}" title="${escapeHtml(e.name)}: работает${state.viewer ? '' : '. Нажмите, чтобы записать остановку'}">
-        <span class="machine__name">${escapeHtml(e.name)}</span>
-        ${mark}
-      </button>`;
-  }
-  return `
-    <button class="machine machine--down" data-machine="${e.id}" data-machine-bd="${bd.id}" title="${escapeHtml(e.name)}: стоит с ${fmtWhen(bd.start)}">
-      <span class="machine__name">${escapeHtml(e.name)}</span>
-      ${mark}
-      <span class="machine__reason"><span class="sym" aria-hidden="true">■</span> ${escapeHtml(bd.reason)}</span>
-      <span class="machine__timer" data-since="${bd.start}">${fmtDuration(Date.now() - new Date(bd.start))}</span>
-    </button>`;
-}
-
 // Фамилии, которые уже вводили в «Кто закончил ремонт», — для подсказок.
 const knownRepairers = () =>
   [...new Set(DB.data.breakdowns.map((b) => b.repairedBy).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
 
-// eqId — станок выбран заранее (нажали плитку в сетке станков).
+// eqId — станок выбран заранее (сейчас не используется кнопкой «Остановка», оставлен для вызовов с готовым станком).
 function openBreakdownForm(bd = null, eqId = null) {
   const eqList = DB.data.equipment;
   if (!eqList.length) {
@@ -2102,7 +2040,7 @@ $('#panel').addEventListener('change', (e) => {
 
 $('#fab').addEventListener('click', () => {
   if (state.viewer) return;
-  if (state.tab === 'current') return openMachinePicker();
+  if (state.tab === 'current') return openBreakdownForm(); // станок выбирается в самой форме
   if (state.tab === 'repair') return openRepairForm();
   if (state.tab === 'warehouse') return state.admin && openPartForm();
 });
