@@ -1012,17 +1012,27 @@ $('#panel').addEventListener('change', (e) => {
       d.settings.masters.forEach((m) => { if (m.number === old) m.number = v; });
     });
   }
-  if (el.dataset.time) {
-    const type = SETTINGS().shiftTypes[el.dataset.time];
-    const next = { ...type, [el.dataset.field]: el.value };
-    if (!el.value || next.start === next.end) {
-      $('#set-time-error').textContent = 'Начало и конец смены не могут совпадать.';
-      $('#set-time-error').hidden = false;
-      el.value = type[el.dataset.field];
-      return;
-    }
-    DB.update((d) => { d.settings.shiftTypes[el.dataset.time][el.dataset.field] = el.value; });
+});
+
+// Время смены сохраняем, когда курсор уходит из поля, а не на каждую цифру: любое сохранение
+// перерисовывает панель, и поле времени пропадало бы посреди ввода (часы → минуты).
+$('#panel').addEventListener('focusout', (e) => {
+  const el = e.target;
+  if (!el.dataset?.time) return;
+  const type = SETTINGS().shiftTypes[el.dataset.time];
+  if (el.value === type[el.dataset.field]) return;
+  const next = { ...type, [el.dataset.field]: el.value };
+  if (!el.value || next.start === next.end) {
+    $('#set-time-error').textContent = 'Начало и конец смены не могут совпадать.';
+    $('#set-time-error').hidden = false;
+    el.value = type[el.dataset.field];
+    return;
   }
+  const to = e.relatedTarget?.dataset?.time
+    ? `[data-time="${e.relatedTarget.dataset.time}"][data-field="${e.relatedTarget.dataset.field}"]` : '';
+  DB.update((d) => { d.settings.shiftTypes[el.dataset.time][el.dataset.field] = el.value; });
+  // Перерисовка убрала поле, в которое перешли (например, из «Начала» в «Конец»), — вернуть в него курсор.
+  if (to) $(to)?.focus();
 });
 
 // Журнал передач ремонта между сменами — для окна с полной информацией.
