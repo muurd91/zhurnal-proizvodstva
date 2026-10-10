@@ -143,11 +143,11 @@ button { cursor: pointer; }
 .logo__t { fill: currentColor; }
 .logo--mono .logo__g, .logo--mono .logo__r { fill: currentColor; }
 .start-logo { width: clamp(150px, 52%, 220px); }
-/* Знак — в свободном месте между «Мануалами» и «Настройками», по центру; бледный, чтобы не спорил с меню.
+/* Знак — в свободном месте между «Мануалами» и «Настройками», по центру; пока полноцветный (эксперимент: серый был .logo--mono с opacity .3).
    Если места мало (контейнер ниже ~100px), скрывается. */
 .nav__logo-area { flex: 1 1 0; min-height: 0; display: grid; place-items: center; padding: 12px 0; container-type: size; }
 /* Ширина — как у кнопки вкладки; если по высоте не помещается, уменьшается пропорционально (1.13 — соотношение сторон знака) */
-.nav__logo { width: min(100%, calc(100cqh * 1.13)); color: var(--muted); opacity: .3; pointer-events: none; }
+.nav__logo { width: min(100%, calc(100cqh * 1.13)); pointer-events: none; }
 @container (max-height: 100px) { .nav__logo { display: none; } }
 .card__actions {
   display: flex;
