@@ -21,6 +21,7 @@ const state = {
   eqPeriod: store.get('eqPeriod', '30'), // период статистики в перечне оборудования
   historyLimit: 20,                      // сколько смен показано в истории
   eqOpen: new Set(),                     // раскрытые строки в перечне оборудования
+  eqClosed: new Set(store.get('eqClosed', [])), // свёрнутые подгруппы в перечне (запоминается на устройстве)
   histOpen: new Set(),                   // раскрытые смены в истории (не сохраняется)
   histSeeded: new Set(),                 // смены, которым уже выставили раскрытие по умолчанию
   admin: false,                     // режим настроек: переживает обновление страницы, но не закрытие приложения
@@ -565,14 +566,31 @@ function equipmentView() {
       <span>Оборудование</span><span>Маркировка</span><span>Состояние</span><span>Поломок</span><span>Простой</span><span>Последняя</span><span></span>
     </div>`;
 
-  return periodSwitch() + tiles + getGroups().map((g) => `
+  return periodSwitch() + tiles + getGroups().map((g) => {
+    const items = list.filter((e) => e.group === g);
+    const open = !state.eqClosed.has(g);
+    const rep = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && !isMaint(r); }).length;
+    const mnt = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && isMaint(r); }).length;
+    const count = (kind, n, label) => `<span class="eq-count${n ? '' : ' is-zero'}"><span class="dot dot--${kind}"></span><b>${n}</b> ${label}</span>`;
+    return `
     <section class="eq-group">
-      <h3 class="eq-group__title">${escapeHtml(g)}</h3>
-      <div class="eq-rows">
+      <h3 class="eq-group__title">
+        <button class="eq-group__toggle" data-eq-group="${escapeHtml(g)}" aria-expanded="${open}">
+          <span class="eq-group__name">${escapeHtml(g)}</span>
+          <span class="eq-group__counts">
+            ${count('ok', items.length - rep - mnt, 'работает')}
+            ${count('maintenance', mnt, 'обслуживание')}
+            ${count('repair', rep, 'в ремонте')}
+          </span>
+          <span class="eq-group__chev">${ICONS.chevron}</span>
+        </button>
+      </h3>
+      ${open ? `<div class="eq-rows">
         ${head}
-        ${list.filter((e) => e.group === g).sort(order).map((e) => equipmentRow(e, stats.get(e.id))).join('')}
-      </div>
-    </section>`).join('');
+        ${items.sort(order).map((e) => equipmentRow(e, stats.get(e.id))).join('')}
+      </div>` : ''}
+    </section>`;
+  }).join('');
 }
 
 // ---------- Статистика по оборудованию ----------
@@ -1091,6 +1109,14 @@ $('#panel').addEventListener('click', (e) => {
 
   const edit = e.target.closest('[data-eq-edit]');
   if (edit) return openEquipmentForm(getEquipment().find((x) => x.id === edit.dataset.eqEdit));
+
+  const group = e.target.closest('[data-eq-group]');
+  if (group) {
+    const g = group.dataset.eqGroup;
+    if (state.eqClosed.has(g)) state.eqClosed.delete(g); else state.eqClosed.add(g);
+    store.set('eqClosed', [...state.eqClosed]);
+    return renderTab();
+  }
 
   const item = e.target.closest('[data-eq]');
   if (item) {
