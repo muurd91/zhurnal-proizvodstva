@@ -2668,6 +2668,8 @@ function escapeHtml(s) {
 }
 
 // ================= Запуск =================
+$('#start-logo').innerHTML = LOGO.full;
+$('#nav-logo').innerHTML = LOGO.mark;
 $('#btn-settings .tab__icon').innerHTML = ICONS.settings;
 $('#btn-edit .edit-btn__icon').innerHTML = ICONS.edit;
 tickClock();

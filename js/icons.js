@@ -22,3 +22,21 @@ const ICONS = (() => {
     search:    svg('<path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>'),
   };
 })();
+
+// Логотип предприятия. Цвета и «одноцветный» режим — в CSS (.logo__g, .logo__r, .logo__t, .logo--mono).
+const LOGO = (() => {
+  const mark =
+    '<polygon class="logo__g" points="396,82 610,448 522,448 352,158"/>' +
+    '<polygon class="logo__g" points="338,183 383,259 275,448 187,448"/>' +
+    '<polygon class="logo__r" points="397,285 492,448 423,448 397.5,406 372,448 304,448"/>';
+  const text =
+    '<path class="logo__t" d="M129 585L174 470H200L245 585H217L187.5 506L157 585Z"/>' +
+    '<path class="logo__t" d="M274 470H296L322 549L349 470H372L392 585H367L354 518L333 585H312L290 517L277 585H251Z"/>' +
+    '<path class="logo__t" d="M410 470H432V585H410Z"/>' +
+    '<path class="logo__t" d="M454 470H473L515 541V470H537V585H515V582L476.5 517V585H454Z"/>' +
+    '<path class="logo__t" d="M549.5 585L596 470H621L667 585H639L609 506L579 585Z"/>';
+  return {
+    mark: `<svg viewBox="168 62 460 406" aria-hidden="true">${mark}</svg>`,
+    full: `<svg viewBox="118 70 560 530" aria-hidden="true">${mark}${text}</svg>`,
+  };
+})();

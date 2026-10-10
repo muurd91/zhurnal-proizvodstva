@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" fill="#1F2329"/>
-  <g transform="translate(141 141) scale(9.583)" fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="4" y="3" width="16" height="18" rx="2"/>
-    <path d="M8 8h8M8 12h8M8 16h5"/>
+  <g transform="translate(5.2 89.2) scale(0.6294)">
+    <polygon fill="#82DA3A" points="396,82 610,448 522,448 352,158"/>
+    <polygon fill="#82DA3A" points="338,183 383,259 275,448 187,448"/>
+    <polygon fill="#F6282A" points="397,285 492,448 423,448 397.5,406 372,448 304,448"/>
   </g>
 </svg>

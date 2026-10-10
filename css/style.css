@@ -134,6 +134,16 @@ button { cursor: pointer; }
 .card--form { display: grid; gap: 20px; }
 .card__title { margin: 0; font-size: 1.4em; }
 .card--start .card__title { color: var(--brand); }
+
+/* Логотип: на стартовом экране полноцветный, внутри приложения одноцветный (красный и зелёный в интерфейсе заняты статусами) */
+.logo { color: var(--text); }
+.logo svg { display: block; width: 100%; height: auto; }
+.logo__g { fill: #82DA3A; }
+.logo__r { fill: #F6282A; }
+.logo__t { fill: currentColor; }
+.logo--mono .logo__g, .logo--mono .logo__r { fill: currentColor; }
+.start-logo { width: clamp(150px, 52%, 220px); }
+.nav__logo { width: clamp(44px, 62%, 84px); margin: 0 auto 12px; }
 .card__actions {
   display: flex;
   justify-content: space-between;
@@ -316,13 +326,14 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 10vh 0 var(--gap);
+  padding: var(--gap) 0 var(--gap);
   min-height: 0;
   overflow-y: auto; /* на невысоком экране вкладки прокручиваются, а не уходят за край */
   overflow-x: hidden;
 }
 /* minmax(0, …): длинная подпись не раздвигает колонку шире меню, а переносится */
 .nav__tabs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.nav__top { display: grid; align-content: start; }
 
 .tab {
   position: relative;
@@ -1393,6 +1404,7 @@ body.is-viewer #btn-edit { display: none !important; }
 /* Невысокий экран (планшет 1024×600, ноутбук с панелями браузера): вкладки пониже,
    чтобы меню вместе с «Настройками» помещалось без прокрутки */
 @media (max-height: 650px) {
+  .nav__logo { display: none; }
   .tab { min-height: 48px; }
   .nav__tabs { gap: 4px; }
   .app__nav { padding-top: 2vh; }

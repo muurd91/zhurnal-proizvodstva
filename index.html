@@ -15,6 +15,7 @@
   <!-- ===== Экран 1: начало смены ===== -->
   <section id="screen-start" class="screen screen--center">
     <div class="card card--start" id="start-step-1">
+      <div class="logo logo--full start-logo" id="start-logo" role="img" aria-label="AMINA"></div>
       <h1 class="card__title">Журнал производства</h1>
       <div class="start-clock">
         <div class="start-clock__time" id="start-time">--:--</div>
@@ -82,7 +83,10 @@
       </div>
 
       <nav class="app__nav">
-        <div class="nav__tabs" id="nav-tabs"></div>
+        <div class="nav__top">
+          <div class="logo logo--mono nav__logo" id="nav-logo" role="img" aria-label="AMINA"></div>
+          <div class="nav__tabs" id="nav-tabs"></div>
+        </div>
         <button class="tab tab--settings" id="btn-settings" title="Настройки" aria-label="Настройки">
           <span class="tab__icon" data-icon="settings"></span>
           <span class="tab__label">Настройки</span>
