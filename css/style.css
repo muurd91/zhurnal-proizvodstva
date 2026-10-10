@@ -143,7 +143,11 @@ button { cursor: pointer; }
 .logo__t { fill: currentColor; }
 .logo--mono .logo__g, .logo--mono .logo__r { fill: currentColor; }
 .start-logo { width: clamp(150px, 52%, 220px); }
-.nav__logo { width: clamp(44px, 62%, 84px); margin: 0 auto 12px; }
+/* Знак — в свободном месте между «Мануалами» и «Настройками», по центру; бледный, чтобы не спорил с меню.
+   Если места мало (контейнер ниже ~100px), скрывается. */
+.nav__logo-area { flex: 1 1 0; min-height: 0; display: grid; place-items: center; padding: 12px 0; container-type: size; }
+.nav__logo { width: clamp(44px, 62%, 84px); color: var(--muted); opacity: .3; pointer-events: none; }
+@container (max-height: 100px) { .nav__logo { display: none; } }
 .card__actions {
   display: flex;
   justify-content: space-between;
@@ -326,14 +330,13 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: var(--gap) 0 var(--gap);
+  padding: 10vh 0 var(--gap);
   min-height: 0;
   overflow-y: auto; /* на невысоком экране вкладки прокручиваются, а не уходят за край */
   overflow-x: hidden;
 }
 /* minmax(0, …): длинная подпись не раздвигает колонку шире меню, а переносится */
 .nav__tabs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
-.nav__top { display: grid; align-content: start; }
 
 .tab {
   position: relative;
