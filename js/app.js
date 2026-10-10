@@ -2732,9 +2732,16 @@ OneDrive.onChange(renderSaveStatus);
 // Запись: { id, at, kind, text, tab, master, shiftId, status }. Вкладка, мастер и смена подставляются сами.
 function openFeedbackForm() {
   let kind = 'hard';
+  const page = visibleTabs().find((t) => t.id === state.tab);
+  const shift = DB.data.currentShift;
   const kinds = Object.entries(CONFIG.feedbackKinds)
     .map(([id, label]) => `<button type="button" class="chip${id === kind ? ' is-active' : ''}" data-fb-kind="${id}">${label}</button>`).join('');
   openModal('Замечание', `
+    <div class="fb-context">
+      <span class="fb-context__label">Замечание к странице</span>
+      <b>${escapeHtml(page ? page.title : '')}</b>
+      ${shift ? `<span class="muted">Смена: мастер ${escapeHtml(shift.master)}</span>` : ''}
+    </div>
     <div class="field">
       <span class="field__label">Что это</span>
       <div class="chips" id="fb-kind">${kinds}</div>
@@ -2743,7 +2750,7 @@ function openFeedbackForm() {
       <span class="field__label">Что не так или что предлагаете</span>
       <textarea id="fb-text" rows="5" placeholder="Опишите своими словами"></textarea>
     </label>
-    <p class="muted">Вкладка и смена записываются сами. Замечание увидит разработчик.</p>
+    <p class="muted">Страница и смена записываются сами. Замечание увидит разработчик.</p>
     <p class="error" id="fb-error" aria-live="polite" hidden></p>`, [
     { label: 'Отмена' },
     {
@@ -2751,12 +2758,10 @@ function openFeedbackForm() {
       onClick: () => {
         const text = $('#fb-text').value.trim();
         if (!text) { fieldError('#fb-text', 'Напишите, в чём дело.', '#fb-error'); return false; }
-        const shift = DB.data.currentShift;
-        const tab = visibleTabs().find((t) => t.id === state.tab);
         DB.update((d) => {
           d.feedback.push({
             id: uid(), at: new Date().toISOString(), kind, text,
-            tab: tab ? tab.title : '', master: shift ? shift.master : '', shiftId: shift ? shift.id : null, status: 'new',
+            tab: page ? page.title : '', master: shift ? shift.master : '', shiftId: shift ? shift.id : null, status: 'new',
           });
         });
         openModal('Спасибо', '<p>Замечание отправлено разработчику.</p>', [{ label: 'Закрыть', primary: true }]);
