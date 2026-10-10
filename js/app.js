@@ -727,6 +727,7 @@ function shiftBreakdowns(shift, end) {
   const s = shift.start;
   const own = [], carried = [];
   for (const b of DB.data.breakdowns) {
+    if (isMaint(b)) continue; // обслуживание в истории смен не показываем — оно ведётся отдельно, во вкладке оборудования
     if (b.shiftId === shift.id) own.push(b);
     else if (b.start < s && (!b.end || b.end > s)) carried.push(b);
   }
@@ -1538,7 +1539,7 @@ function confirmDeleteBreakdown(bd) {
 // Смену с поломкой, которая ещё в ремонте, удалить нельзя: станок «выздоровел» бы сам собой.
 function confirmDeleteShift(sh) {
   if (!sh) return;
-  const own = DB.data.breakdowns.filter((b) => b.shiftId === sh.id);
+  const own = DB.data.breakdowns.filter((b) => b.shiftId === sh.id && !isMaint(b)); // обслуживание смену не держит и не удаляется с ней
   const inRepair = own.filter((b) => b.status === 'repair');
   const label = `${SETTINGS().shiftTypes[sh.type]?.label || ''} смена · ${shiftDays(new Date(sh.start), new Date(sh.end))}`;
   if (inRepair.length) {
@@ -1559,7 +1560,7 @@ function confirmDeleteShift(sh) {
       label: 'Удалить', danger: true,
       onClick: () => DB.update((d) => {
         for (const b of own) applyUsage(d, b.used || [], []);
-        d.breakdowns = d.breakdowns.filter((b) => b.shiftId !== sh.id);
+        d.breakdowns = d.breakdowns.filter((b) => b.shiftId !== sh.id || isMaint(b));
         d.shifts = d.shifts.filter((x) => x.id !== sh.id);
       }),
     },
