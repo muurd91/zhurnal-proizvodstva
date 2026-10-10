@@ -661,9 +661,16 @@ body {
   background: transparent;
   text-align: left;
 }
-.hist-row--repair { border-left-color: var(--danger); }
-.hist-row--maintenance { border-left-color: var(--warning-line); }
-@media (hover: hover) { .hist-row:hover { background: var(--surface-2); } }
+/* Строки истории — тоже заливаются цветом статуса */
+.hist-row--repair { border-left-color: var(--danger); background: var(--danger-soft); }
+.hist-row--maintenance { border-left-color: var(--warning-line); background: var(--warning-soft); }
+.hist-row--done { border-left-color: var(--ok); background: var(--ok-soft); }
+@media (hover: hover) {
+  .hist-row:hover { background: var(--surface-2); }
+  .hist-row--repair:hover { background: color-mix(in srgb, var(--danger) 16%, var(--surface)); }
+  .hist-row--maintenance:hover { background: color-mix(in srgb, var(--warning) 28%, var(--surface)); }
+  .hist-row--done:hover { background: color-mix(in srgb, var(--ok) 18%, var(--surface)); }
+}
 .hist-row__time { display: grid; font-weight: 700; font-variant-numeric: tabular-nums; }
 .hist-row__time small { font-size: max(14px, .8em); font-weight: 600; }
 .hist-row--carried .hist-row__time { color: var(--muted); } /* запись не своя — время приглушено */
@@ -1083,9 +1090,9 @@ body.is-viewer #btn-edit { display: none !important; }
   background: var(--danger-soft);
   text-align: left;
 }
-/* Обводка и заливка — в цвет статуса: ремонт красный, обслуживание жёлтый, завершённое нейтральное */
+/* Обводка и заливка — в цвет статуса: ремонт красный, обслуживание жёлтый, завершённое (отремонтировано/обслужено) зелёный */
 .bd-item--maintenance { border-color: var(--warning-line); background: var(--warning-soft); }
-.bd-item--done { border-color: var(--border); border-left-color: transparent; background: var(--surface); }
+.bd-item--done { border-color: var(--ok); background: var(--ok-soft); }
 @media (hover: hover) { button.bd-item:hover { border-color: var(--accent); } }
 .bd-item__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; }
 .bd-item__head > :first-child { flex: 1 1 160px; }
@@ -1117,8 +1124,8 @@ body.is-viewer #btn-edit { display: none !important; }
 .bd-status--urgent { background: var(--warning); color: var(--on-warning); }
 
 /* Заявки на ремонт — «требует внимания», не авария. Специфичнее .bd-item, иначе полоса перебивается. */
-.bd-item.rq-item--open { border-color: var(--border); border-left-color: var(--warning-line); background: var(--surface); }
-.bd-item.rq-item--done { border-color: var(--border); border-left-color: transparent; background: var(--surface); }
+.bd-item.rq-item--open { border-color: var(--warning-line); background: var(--warning-soft); }
+.bd-item.rq-item--done { border-color: var(--ok); background: var(--ok-soft); }
 .bd-status--done { background: var(--ok); color: var(--on-ok); }
 
 .empty {
