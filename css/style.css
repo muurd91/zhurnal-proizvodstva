@@ -1343,3 +1343,12 @@ button:focus-visible, .tab:focus-visible, .save-status:focus-visible { outline: 
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
 }
+
+/* ПК (мышь, широкое окно): вкладки не прижаты к краю экрана, поэтому скругляем и левую сторону.
+   На планшете левый край экрана сам служит краем вкладки — там остаётся как есть. */
+@media (hover: hover) and (min-width: 1101px) {
+  .app__nav { padding-left: var(--gap); }
+  .tab { border-left: 1px solid var(--border); border-radius: var(--radius); }
+  .tab.is-active { border-left-color: var(--active-border); }
+  .tab--admin { border-left: 1px dashed var(--admin); }
+}
