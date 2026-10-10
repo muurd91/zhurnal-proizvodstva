@@ -2254,11 +2254,12 @@ $('#panel').addEventListener('click', (e) => {
 
 // ================= Завершение смены =================
 // Если есть оборудование в ремонте, по каждому нужно решить: закрыть ремонт или передать смене.
+// Обслуживание смену не держит: оно может длиться неделями, при закрытии смены его не трогаем.
 // Переданная поломка остаётся «в ремонте», а в её записи появляется отметка о передаче.
 $('#btn-end-shift').addEventListener('click', () => {
   if (state.viewer) return setViewer(false);
   const open = DB.data.breakdowns
-    .filter((b) => b.status === 'repair')
+    .filter((b) => b.status === 'repair' && !isMaint(b))
     .sort((a, b) => a.start.localeCompare(b.start));
 
   const finish = (closes = {}) => {
@@ -2267,7 +2268,7 @@ $('#btn-end-shift').addEventListener('click', () => {
     DB.update((d) => {
       const shift = d.currentShift;
       for (const b of d.breakdowns) {
-        if (b.status !== 'repair') continue;
+        if (b.status !== 'repair' || isMaint(b)) continue;
         const c = closes[b.id];
         if (c) {
           applyUsage(d, [], c.used);
