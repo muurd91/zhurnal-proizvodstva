@@ -4,7 +4,7 @@
 //
 // При любом изменении файлов приложения поднимать VERSION — иначе планшет будет держать старую копию.
 // Новый файл manuals/kb-*.js — добавить в SHELL.
-const VERSION = 'v28';
+const VERSION = 'v29';
 const CACHE = `jp-shell-${VERSION}`;
 
 const SHELL = [
