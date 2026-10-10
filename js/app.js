@@ -2250,7 +2250,13 @@ function kbCard(entry, manual, open = true) {
     <div class="kb-card__block">
       <h5>Что делать</h5>
       <ol>${entry.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
-    </div>`;
+    </div>
+    ${entry.advice?.length ? `
+    <div class="kb-card__block kb-card__block--advice">
+      <h5>Совет Claude <span class="kb-advice-tag">не из мануала</span></h5>
+      <ul>${entry.advice.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
+      <p class="kb-advice-note">Предположение по общим знаниям, не из мануала. Сверяйтесь с ситуацией; работы под напряжением — только электрик.</p>
+    </div>` : ''}`;
   return `
     <details class="kb-card kb-card--${entry.kind}"${open ? ' open' : ''}>
       <summary class="kb-card__head">${head}</summary>

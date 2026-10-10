@@ -1024,6 +1024,11 @@ body {
 .kb-card__src a { color: var(--accent); }
 .kb-card__block { padding: 8px 14px 0; }
 .kb-card__block:last-child { padding-bottom: 14px; }
+/* Совет Claude: отдельный блок, чтобы не путать с текстом мануала */
+.kb-card__block--advice { margin: 10px 14px 0; padding: 10px 14px; border: 1px dashed var(--border); border-left: 4px solid var(--accent); border-radius: var(--radius); background: var(--surface-2); }
+.kb-card__block--advice:last-child { margin-bottom: 14px; padding-bottom: 10px; }
+.kb-advice-tag { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); text-transform: none; letter-spacing: 0; font-weight: 600; }
+.kb-advice-note { margin: 8px 0 0; font-size: max(14px, .85em); color: var(--muted); }
 .kb-card__block h5 { margin: 0 0 4px; font-size: max(14px, .78em); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .kb-card__block ul, .kb-card__block ol { margin: 0; padding-left: 22px; display: grid; gap: 3px; }
 
