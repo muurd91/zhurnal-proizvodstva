@@ -1504,7 +1504,9 @@ function saveBreakdown(bd, { status, types = [], kind = 'repair' }) {
     const found = bd && d.breakdowns.find((x) => x.id === bd.id);
     if (found) {
       // Помечаем только настоящую правку: «Сохранить» без изменений отметку не ставит.
-      const same = Object.keys(fields).every((k) => JSON.stringify(found[k] ?? null) === JSON.stringify(fields[k] ?? null));
+      // Время в форме без секунд, поэтому сравниваем с точностью до минуты.
+      const norm = (k, v) => ((k === 'start' || k === 'end') && v ? v.slice(0, 16) : JSON.stringify(v ?? null));
+      const same = Object.keys(fields).every((k) => norm(k, found[k]) === norm(k, fields[k]));
       Object.assign(found, fields);
       if (!same) Object.assign(found, { editedAt: new Date().toISOString(), editedBy: state.admin ? 'режим настроек' : d.currentShift?.master || '' });
     }
