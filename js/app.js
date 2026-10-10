@@ -665,7 +665,6 @@ function equipmentRow(e, s) {
 
 function equipmentDetails(eq, s) {
   const types = Object.entries(s.byType).sort((a, b) => b[1] - a[1]);
-  const max = types.length ? types[0][1] : 0;
   const history = [...s.history].sort((a, b) => b.start.localeCompare(a.start));
   return `
     <div class="eq-info">
@@ -686,7 +685,6 @@ function equipmentDetails(eq, s) {
         ${types.map(([t, n]) => `
           <div class="type-bar" title="${escapeHtml(t)}: ${n}">
             <span class="type-bar__label">${escapeHtml(t)}</span>
-            <span class="type-bar__track"><span class="type-bar__fill" style="width:${(n / max) * 100}%"></span></span>
             <span class="type-bar__value">${n}</span>
           </div>`).join('')}
       </div>` : ''}

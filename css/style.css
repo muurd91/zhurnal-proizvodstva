@@ -571,17 +571,21 @@ body {
 .eq-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: .9em; color: var(--muted); }
 .eq-info b { color: var(--text); }
 
-.type-bars { display: grid; gap: 8px; }
+/* Типы поломок — одной строкой на всю ширину, число под названием; не помещаются — переносятся */
+.type-bars { display: flex; flex-wrap: wrap; gap: 8px; }
 .type-bar {
+  flex: 1 1 100px;
   display: grid;
-  grid-template-columns: minmax(90px, 140px) 1fr 32px;
-  align-items: center;
-  gap: 10px;
-  font-size: .9em;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: center;
 }
-.type-bar__track { height: 12px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
-.type-bar__fill { display: block; height: 100%; min-width: 4px; border-radius: 4px; background: var(--accent); }
-.type-bar__value { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.type-bar__label { font-size: max(14px, .85em); color: var(--muted); overflow-wrap: anywhere; }
+.type-bar__value { font-size: 1.4em; font-weight: 700; font-variant-numeric: tabular-nums; }
 .eq-item__name { font-weight: 600; }
 .eq-item__meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: max(14px, .85em); color: var(--muted); }
 .eq-item__meta b { color: var(--text); font-weight: 600; }
