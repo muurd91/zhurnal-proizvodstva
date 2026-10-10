@@ -1274,18 +1274,15 @@ function breakdownCard(b, clickable = true, showEq = true) {
 function currentShiftView() {
   const shiftId = DB.data.currentShift?.id;
   const all = DB.data.breakdowns;
-  const open = all.filter((b) => b.status === 'repair').sort((a, b) => a.start.localeCompare(b.start));
-  const doneHere = all.filter((b) => b.status === 'done' && b.shiftId === shiftId).sort((a, b) => b.start.localeCompare(a.start));
-  // Ремонт и обслуживание — отдельные блоки: обслуживание не считается в «В ремонте».
-  const inRepair = open.filter((b) => !isMaint(b)), inMaint = open.filter(isMaint);
-  const doneRepair = doneHere.filter((b) => !isMaint(b)), doneMaint = doneHere.filter(isMaint);
+  // Обслуживание на «Смене» не показываем: оно может идти неделями и ведётся во вкладке «Оборудование».
+  const open = all.filter((b) => b.status === 'repair' && !isMaint(b)).sort((a, b) => a.start.localeCompare(b.start));
+  const doneHere = all.filter((b) => b.status === 'done' && !isMaint(b) && b.shiftId === shiftId).sort((a, b) => b.start.localeCompare(a.start));
 
   const section = (title, list) => list.length
     ? `<section class="bd-section"><h3 class="eq-group__title">${title} · ${list.length}</h3><div class="bd-list">${list.map((b) => withTrash(breakdownCard(b), b)).join('')}</div></section>`
     : '';
   const list = open.length || doneHere.length
-    ? section('В ремонте', inRepair) + section('На обслуживании', inMaint)
-      + section('Отремонтировано в эту смену', doneRepair) + section('Обслужено в эту смену', doneMaint)
+    ? section('В ремонте', open) + section('Отремонтировано в эту смену', doneHere)
     : '<p class="muted bd-none">Поломок в эту смену не было.</p>';
   return machineGrid() + list;
 }
@@ -1318,14 +1315,16 @@ function machineGrid() {
   const open = openBreakdowns();
   const maintOpen = openMaintenance();
   const down = list.filter((e) => open.has(e.id)).length;
+  // Станки на обслуживании в сводке смены не считаем и не показываем: они видны в «Оборудовании».
   const maint = list.filter((e) => maintOpen.has(e.id) && !open.has(e.id)).length;
-  const working = list.length - down - maint;
+  const total = list.length - maint;
+  const working = total - down;
   const shift = DB.data.currentShift;
   const downtime = shift ? fmtDuration(shiftBreakdowns(shift, new Date()).downtime) : null;
 
   const summary = `
     <p class="machines__summary">
-      <b>${working} из ${list.length}</b> ${plural(working, 'работает', 'работают', 'работают')}${down ? ` · <span class="machines__down">${down} ${plural(down, 'стоит', 'стоят', 'стоят')}</span>` : ''}${maint ? ` · <span class="machines__maint">${maint} на обслуживании</span>` : ''}
+      <b>${working} из ${total}</b> ${plural(working, 'работает', 'работают', 'работают')}${down ? ` · <span class="machines__down">${down} ${plural(down, 'стоит', 'стоят', 'стоят')}</span>` : ''}
       ${downtime ? ` · простой за смену <b data-shift-downtime>${downtime}</b>` : ''}
     </p>`;
 
