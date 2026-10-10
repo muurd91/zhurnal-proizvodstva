@@ -455,10 +455,12 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
 .eq-group--card.is-open .eq-group__toggle { background: var(--surface-2); border-bottom: 2px solid var(--border); }
 @media (hover: hover) { .eq-group--card:not(.is-open) .eq-group__toggle:hover { background: var(--surface-2); } }
 .eq-group--card .eq-rows { border: 0; border-radius: 0; }
+.eq-group--card .eq-head { background: var(--surface); } /* заголовок подгруппы уже серый — шапка колонок не дублирует его */
 .eq-group__name { flex: 0 1 auto; }
 .eq-group__counts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-right: auto; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--text); }
 .eq-count { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.eq-count.is-zero { opacity: .45; }
+.eq-count.is-zero { color: var(--muted); font-weight: 500; }
+.eq-count.is-zero .dot { opacity: .5; }
 .eq-group__chev { flex: none; width: 22px; height: 22px; color: var(--muted); transition: transform .2s; }
 .eq-group__chev svg { width: 100%; height: 100%; }
 .eq-group__toggle[aria-expanded="true"] .eq-group__chev { transform: rotate(180deg); }

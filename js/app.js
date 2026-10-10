@@ -550,7 +550,7 @@ function equipmentView() {
     <div class="stat-row">
       ${statTile('Работает', `${list.length - repairN - maintN} из ${list.length}`)}
       ${statTile('В ремонте', repairN, repairN ? 'bad' : '')}
-      ${maintN ? statTile('Обслуживание', maintN, 'maint') : ''}
+      ${statTile('Обслуживание', maintN, maintN ? 'maint' : '')}
       ${statTile(`Поломок · ${periodLabel()}`, all.reduce((n, s) => n + s.count, 0))}
       ${statTile(`Простой · ${periodLabel()}`, fmtDuration(all.reduce((n, s) => n + s.downtime, 0)))}
     </div>`;
@@ -569,7 +569,7 @@ function equipmentView() {
 
   return periodSwitch() + tiles + getGroups().map((g) => {
     const items = list.filter((e) => e.group === g);
-    const open = state.eqGroupsOpen.has(g);
+    const open = state.eqGroupsOpen.has(String(g)); // ключ — строка из data-атрибута, даже если у записи нет подгруппы
     const rep = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && !isMaint(r); }).length;
     const mnt = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && isMaint(r); }).length;
     const count = (kind, n, label) => `<span class="eq-count${n ? '' : ' is-zero'}"><span class="dot dot--${kind}"></span><b>${n}</b> ${label}</span>`;
@@ -577,7 +577,7 @@ function equipmentView() {
     <section class="eq-group eq-group--card${open ? ' is-open' : ''}">
       <h3 class="eq-group__title">
         <button class="eq-group__toggle" data-eq-group="${escapeHtml(g)}" aria-expanded="${open}">
-          <span class="eq-group__name">${escapeHtml(g)}</span>
+          <span class="eq-group__name">${escapeHtml(g || 'Без подгруппы')}</span>
           <span class="eq-group__counts">
             ${count('ok', items.length - rep - mnt, 'работает')}
             ${count('maintenance', mnt, 'обслуживание')}
@@ -687,7 +687,7 @@ function equipmentDetails(eq, s) {
   const history = [...s.history].sort((a, b) => b.start.localeCompare(a.start));
   return `
     <div class="eq-info">
-      <span>Подгруппа: <b>${escapeHtml(eq.group)}</b></span>
+      <span>Подгруппа: <b>${escapeHtml(eq.group || '—')}</b></span>
       ${eq.mark ? `<span>Маркировка: <b>${escapeHtml(eq.mark)}</b></span>` : ''}
       ${eq.inv ? `<span>Инв. №: <b>${escapeHtml(eq.inv)}</b></span>` : ''}
       ${state.admin ? `<button class="btn eq-edit" data-eq-edit="${eq.id}">${ICONS.edit} Изменить данные</button>` : ''}
@@ -1054,8 +1054,8 @@ $('#panel').addEventListener('focusout', (e) => {
 
 // Журнал передач ремонта между сменами — для окна с полной информацией.
 function handoverLog(b) {
-  if (!b.handovers?.length) return '';
-  return `
+  if (!b.handovers?.length) return editedNote(b);
+  return editedNote(b) + `
     <h4 class="modal__sub">Передачи между сменами</h4>
     <ul class="ho-log">
       ${b.handovers.map((h) => `<li>${fmtDateTime(h.at)} — передал мастер <b>${escapeHtml(h.master)}</b></li>`).join('')}
@@ -1252,9 +1252,9 @@ function breakdownCard(b, clickable = true, showEq = true) {
         <span>Остановка: <b>${fmtDateTime(b.start)}</b></span>
         ${done ? `<span>Окончание: <b>${fmtDateTime(b.end)}</b></span>` : ''}
         <span>Простой: <b${done ? '' : ` data-since="${b.start}"`}>${dur}</b></span>
-        <span>Мастер: <b>${escapeHtml(b.master)}</b></span>
+        ${b.master ? `<span>Мастер: <b>${escapeHtml(b.master)}</b></span>` : ''}
         ${b.handovers?.length ? `<span>Передано сменам: <b>${b.handovers.length}</b></span>` : ''}
-        ${done ? `<span>${isMaint(b) ? 'Обслужил' : 'Отремонтировал'}: <b>${escapeHtml(b.repairedBy)}</b></span>` : ''}
+        ${done && b.repairedBy ? `<span>${isMaint(b) ? 'Обслужил' : 'Отремонтировал'}: <b>${escapeHtml(b.repairedBy)}</b></span>` : ''}
       </span>
       ${done ? usedLine(b.used) : ''}
     </${tag}>`;
@@ -1337,9 +1337,9 @@ function openBreakdownForm(bd = null, eqId = null) {
     return;
   }
 
-  // Закрытую поломку в обычном режиме можно только посмотреть.
+  // Закрытую поломку в обычном режиме можно только посмотреть; исключение — запись текущей смены на этом устройстве.
   if (state.viewer && !bd) return;
-  const readOnly = bd && (state.viewer || (bd.status === 'done' && !state.admin));
+  const readOnly = bd && (state.viewer || (bd.status === 'done' && !state.admin && !isOwnLive(bd)));
   if (readOnly) {
     openModal('Поломка', `<div class="bd-list">${breakdownCard(bd, false)}</div>${handoverLog(bd)}`, [{ label: 'Закрыть', primary: true }]);
     return;
@@ -1357,6 +1357,8 @@ function openBreakdownForm(bd = null, eqId = null) {
     .join('');
 
   const actions = [
+    // Ошибочную запись текущей смены мастер может убрать сам; чужие и старые удаляются только в режиме настроек.
+    ...(bd && isOwnLive(bd) ? [{ label: 'Удалить', danger: true, onClick: () => { confirmDeleteBreakdown(bd); return false; } }] : []),
     { label: 'Отмена' },
     { label: 'Сохранить', primary: true, onClick: () => saveBreakdown(bd, { status, types, kind }) },
   ];
@@ -1409,6 +1411,7 @@ function openBreakdownForm(bd = null, eqId = null) {
       <span class="field__label">Остановка у мастера</span>
       <div class="field__auto">${escapeHtml(master) || '—'}</div>
     </div>
+    ${editedNote(bd)}
     <p class="error" id="bd-error" aria-live="polite" hidden></p>`, actions, { fill: true });
 
   const fillEquipment = () => {
@@ -1450,6 +1453,16 @@ function openBreakdownForm(bd = null, eqId = null) {
   });
 }
 
+// Запись принадлежит смене, которая идёт сейчас на этом устройстве: её автор может править и удалять её сам.
+function isOwnLive(bd) {
+  const shift = DB.data.currentShift;
+  return !!(bd && shift && !state.viewer && canControl(shift) && bd.shiftId === shift.id);
+}
+
+// Отметка «исправлено»: правка уже записанной поломки остаётся видна в журнале.
+const editedNote = (bd) => bd?.editedAt
+  ? `<p class="muted">Исправлено${bd.editedBy ? `: ${escapeHtml(bd.editedBy)}` : ''}, ${fmtDateTime(bd.editedAt)}</p>` : '';
+
 function saveBreakdown(bd, { status, types = [], kind = 'repair' }) {
   const error = (msg, field) => fieldError(field, msg, '#bd-error');
   const equipmentId = $('#bd-eq').value;
@@ -1489,7 +1502,12 @@ function saveBreakdown(bd, { status, types = [], kind = 'repair' }) {
   DB.update((d) => {
     applyUsage(d, oldUsed, used);
     const found = bd && d.breakdowns.find((x) => x.id === bd.id);
-    if (found) Object.assign(found, fields);
+    if (found) {
+      // Помечаем только настоящую правку: «Сохранить» без изменений отметку не ставит.
+      const same = Object.keys(fields).every((k) => JSON.stringify(found[k] ?? null) === JSON.stringify(fields[k] ?? null));
+      Object.assign(found, fields);
+      if (!same) Object.assign(found, { editedAt: new Date().toISOString(), editedBy: state.admin ? 'режим настроек' : d.currentShift?.master || '' });
+    }
     else d.breakdowns.push({
       id: uid(),
       shiftId: d.currentShift?.id || null,
