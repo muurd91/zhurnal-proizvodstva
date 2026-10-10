@@ -453,10 +453,16 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   background: transparent;
   text-align: left;
 }
-.eq-row--repair { border-left-color: var(--danger); }
-.eq-row--maintenance { border-left-color: var(--status-maintenance); }
-@media (hover: hover) { .eq-row:hover { background: var(--surface-2); } }
+/* Вся строка заливается мягким цветом статуса; полоса слева остаётся как усиление.
+   Наведение и «раскрыто» чуть сгущают заливку, а не заменяют её серым. */
+.eq-row--repair { --row-bg: var(--danger-soft); --row-bg-hover: color-mix(in srgb, var(--danger) 16%, var(--surface)); border-left-color: var(--danger); background: var(--row-bg); }
+.eq-row--maintenance { --row-bg: var(--warning-soft); --row-bg-hover: color-mix(in srgb, var(--warning) 28%, var(--surface)); border-left-color: var(--status-maintenance); background: var(--row-bg); }
+@media (hover: hover) {
+  .eq-row:hover { background: var(--surface-2); }
+  .eq-row--repair:hover, .eq-row--maintenance:hover { background: var(--row-bg-hover); }
+}
 .eq-entry.is-open .eq-row { background: var(--surface-2); }
+.eq-entry.is-open .eq-row--repair, .eq-entry.is-open .eq-row--maintenance { background: var(--row-bg-hover); }
 .eq-row__name { display: grid; min-width: 0; }
 .eq-row__sub { font-size: max(14px, .85em); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eq-row--repair .eq-row__sub { color: var(--danger); }
