@@ -1077,14 +1077,15 @@ body.is-viewer #btn-edit { display: none !important; }
   gap: 6px;
   width: 100%;
   padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--danger);
+  border: 1px solid var(--danger);
+  border-left-width: 4px;
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--danger-soft);
   text-align: left;
 }
-.bd-item--done { border-left-color: transparent; }
-.bd-item--maintenance { border-left-color: var(--warning-line); }
+/* Обводка и заливка — в цвет статуса: ремонт красный, обслуживание жёлтый, завершённое нейтральное */
+.bd-item--maintenance { border-color: var(--warning-line); background: var(--warning-soft); }
+.bd-item--done { border-color: var(--border); border-left-color: transparent; background: var(--surface); }
 @media (hover: hover) { button.bd-item:hover { border-color: var(--accent); } }
 .bd-item__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; }
 .bd-item__head > :first-child { flex: 1 1 160px; }
@@ -1116,8 +1117,8 @@ body.is-viewer #btn-edit { display: none !important; }
 .bd-status--urgent { background: var(--warning); color: var(--on-warning); }
 
 /* Заявки на ремонт — «требует внимания», не авария. Специфичнее .bd-item, иначе полоса перебивается. */
-.bd-item.rq-item--open { border-left-color: var(--warning-line); }
-.bd-item.rq-item--done { border-left-color: transparent; }
+.bd-item.rq-item--open { border-color: var(--border); border-left-color: var(--warning-line); background: var(--surface); }
+.bd-item.rq-item--done { border-color: var(--border); border-left-color: transparent; background: var(--surface); }
 .bd-status--done { background: var(--ok); color: var(--on-ok); }
 
 .empty {
