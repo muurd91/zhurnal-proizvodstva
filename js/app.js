@@ -129,17 +129,28 @@ function openShiftForm() {
   $('#f-master-other').value = '';
   $('#f-master-other-wrap').hidden = true;
 
-  const numbers = SETTINGS().shiftNumbers;
-  $('#f-number-wrap').hidden = !numbers.length;
-  $('#f-number').required = numbers.length > 0;
   $('#f-number').innerHTML = '<option value="" disabled selected>Выберите номер</option>' +
-    numbers.map((n) => `<option>${escapeHtml(n)}</option>`).join('');
+    SETTINGS().shiftNumbers.map((n) => `<option>${escapeHtml(n)}</option>`).join('');
+  syncNumberField();
 
   formType = currentShiftType();
   renderTypeSwitch();
 
   $('#start-step-1').hidden = true;
   $('#start-step-2').hidden = false;
+}
+
+// Номер смены берётся из привязки мастера, поэтому поле показываем, только когда привязки нет:
+// выбрано «Другое» (вышел в чужую смену) или у мастера номер не закреплён.
+function boundNumber() {
+  const bound = SETTINGS().masters.find((m) => m.name === $('#f-master').value)?.number;
+  return bound && SETTINGS().shiftNumbers.includes(bound) ? bound : '';
+}
+function syncNumberField() {
+  const need = SETTINGS().shiftNumbers.length > 0 && !!$('#f-master').value && !boundNumber();
+  $('#f-number-wrap').hidden = !need;
+  $('#f-number').required = need;
+  if (!need) $('#f-number').value = '';
 }
 
 function renderTypeSwitch() {
@@ -203,9 +214,7 @@ $('#f-master').addEventListener('change', (e) => {
   $('#f-master-other-wrap').hidden = !other;
   $('#f-master-other').required = other;
   if (other) $('#f-master-other').focus();
-  // Номер смены — по привязке мастера (можно поменять вручную, например при подмене).
-  const bound = SETTINGS().masters.find((m) => m.name === e.target.value)?.number;
-  if (bound && SETTINGS().shiftNumbers.includes(bound)) $('#f-number').value = bound;
+  syncNumberField();
 });
 
 $('#f-type').addEventListener('click', (e) => {
@@ -220,7 +229,7 @@ $('#start-step-2').addEventListener('submit', async (e) => {
   const sel = $('#f-master').value;
   const master = sel === OTHER ? $('#f-master-other').value.trim() : sel;
   if (!master) return;
-  const number = $('#f-number').value || '';
+  const number = boundNumber() || $('#f-number').value || '';
   if (SETTINGS().shiftNumbers.length && !number) return;
   // Пока заполняли форму, смену могли начать на другом устройстве.
   await freshen();
