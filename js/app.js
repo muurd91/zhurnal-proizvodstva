@@ -21,7 +21,7 @@ const state = {
   eqPeriod: store.get('eqPeriod', '30'), // период статистики в перечне оборудования
   historyLimit: 20,                      // сколько смен показано в истории
   eqOpen: new Set(),                     // раскрытые строки в перечне оборудования
-  eqClosed: new Set(store.get('eqClosed', [])), // свёрнутые подгруппы в перечне (запоминается на устройстве)
+  eqGroupsOpen: new Set(),               // раскрытые подгруппы в перечне; при входе во вкладку всё свёрнуто
   histOpen: new Set(),                   // раскрытые смены в истории (не сохраняется)
   histSeeded: new Set(),                 // смены, которым уже выставили раскрытие по умолчанию
   admin: false,                     // режим настроек: переживает обновление страницы, но не закрытие приложения
@@ -446,6 +446,7 @@ function getBadges() {
 
 // Переход на вкладку (из меню или по ссылке внутри панели).
 function goTab(id) {
+  if (id !== state.tab) state.eqGroupsOpen.clear(); // перечень оборудования каждый раз открывается свёрнутым
   state.tab = id;
   state.editing = false;
   store.set('tab', state.tab);
@@ -568,12 +569,12 @@ function equipmentView() {
 
   return periodSwitch() + tiles + getGroups().map((g) => {
     const items = list.filter((e) => e.group === g);
-    const open = !state.eqClosed.has(g);
+    const open = state.eqGroupsOpen.has(g);
     const rep = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && !isMaint(r); }).length;
     const mnt = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && isMaint(r); }).length;
     const count = (kind, n, label) => `<span class="eq-count${n ? '' : ' is-zero'}"><span class="dot dot--${kind}"></span><b>${n}</b> ${label}</span>`;
     return `
-    <section class="eq-group">
+    <section class="eq-group eq-group--card${open ? ' is-open' : ''}">
       <h3 class="eq-group__title">
         <button class="eq-group__toggle" data-eq-group="${escapeHtml(g)}" aria-expanded="${open}">
           <span class="eq-group__name">${escapeHtml(g)}</span>
@@ -1113,8 +1114,7 @@ $('#panel').addEventListener('click', (e) => {
   const group = e.target.closest('[data-eq-group]');
   if (group) {
     const g = group.dataset.eqGroup;
-    if (state.eqClosed.has(g)) state.eqClosed.delete(g); else state.eqClosed.add(g);
-    store.set('eqClosed', [...state.eqClosed]);
+    if (state.eqGroupsOpen.has(g)) state.eqGroupsOpen.delete(g); else state.eqGroupsOpen.add(g);
     return renderTab();
   }
 
