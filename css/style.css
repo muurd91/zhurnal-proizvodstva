@@ -313,7 +313,7 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
 .link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Список замечаний в режиме настроек */
 /* В окне замечания: к какой странице оно привязано */
-.fb-context { display: grid; gap: 2px; padding: 10px 14px; border-left: 4px solid var(--accent); border-radius: var(--radius); background: var(--surface-2); }
+.fb-context { display: grid; gap: 2px; padding: 10px 14px; border-radius: var(--radius); background: var(--surface-2); }
 .fb-context__label { font-size: .85em; color: var(--muted); }
 .fb-context b { font-size: 1.1em; }
 .fb-list { display: grid; gap: 12px; }
@@ -521,14 +521,13 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   min-height: 60px;
   padding: 10px 16px;
   border: 0;
-  border-left: 4px solid transparent;
   background: transparent;
   text-align: left;
 }
-/* Вся строка заливается мягким цветом статуса; полоса слева остаётся как усиление.
+/* Вся строка заливается мягким цветом статуса; полоса слева убрана.
    Наведение и «раскрыто» чуть сгущают заливку, а не заменяют её серым. */
-.eq-row--repair { --row-bg: var(--danger-soft); --row-bg-hover: color-mix(in srgb, var(--danger) 16%, var(--surface)); border-left-color: var(--danger); background: var(--row-bg); }
-.eq-row--maintenance { --row-bg: var(--warning-soft); --row-bg-hover: color-mix(in srgb, var(--warning) 28%, var(--surface)); border-left-color: var(--status-maintenance); background: var(--row-bg); }
+.eq-row--repair { --row-bg: var(--danger-soft); --row-bg-hover: color-mix(in srgb, var(--danger) 16%, var(--surface)); background: var(--row-bg); }
+.eq-row--maintenance { --row-bg: var(--warning-soft); --row-bg-hover: color-mix(in srgb, var(--warning) 28%, var(--surface)); background: var(--row-bg); }
 @media (hover: hover) {
   .eq-row:hover { background: var(--surface-2); }
   .eq-row--repair:hover, .eq-row--maintenance:hover { background: var(--row-bg-hover); }
@@ -581,7 +580,6 @@ body {
   gap: 14px;
   padding: 6px 20px 20px 20px;
   background: var(--surface-2);
-  border-left: 4px solid var(--border);
 }
 .eq-edit { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-left: auto; }
 .eq-edit svg { width: 18px; height: 18px; }
@@ -680,12 +678,10 @@ body {
   width: 100%;
   padding: 14px 16px 14px 12px;
   border: 0;
-  border-left: 4px solid transparent;
   background: var(--surface-2);
   text-align: left;
 }
 .hist-shift--empty .hist-head { padding-top: 10px; padding-bottom: 10px; gap: 2px 12px; }
-.hist-shift--current .hist-head { border-left-color: var(--accent); } /* идущая смена — полоса слева, без жирной рамки */
 .hist-shift.is-open .hist-head { border-bottom: 1px solid var(--border); }
 @media (hover: hover) { button.hist-head:hover { background: var(--accent-soft); } }
 .hist-head__title { grid-area: title; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 1.15em; font-weight: 700; }
@@ -733,14 +729,13 @@ body {
   min-height: var(--touch);
   padding: 12px 16px 12px 12px;
   border: 0;
-  border-left: 4px solid transparent;
   background: transparent;
   text-align: left;
 }
 /* Строки истории — тоже заливаются цветом статуса */
-.hist-row--repair { border-left-color: var(--danger); background: var(--danger-soft); }
-.hist-row--maintenance { border-left-color: var(--warning-line); background: var(--warning-soft); }
-.hist-row--done { border-left-color: var(--ok); background: var(--ok-soft); }
+.hist-row--repair { background: var(--danger-soft); }
+.hist-row--maintenance { background: var(--warning-soft); }
+.hist-row--done { background: var(--ok-soft); }
 @media (hover: hover) {
   .hist-row:hover { background: var(--surface-2); }
   .hist-row--repair:hover { background: color-mix(in srgb, var(--danger) 16%, var(--surface)); }
@@ -782,11 +777,9 @@ body {
   gap: 10px;
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-left: 4px solid var(--danger);
   border-radius: var(--radius);
   background: var(--surface);
 }
-.handover.is-decided { border-left-color: var(--accent); }
 .handover__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
 .handover__head .muted { font-size: max(14px, .85em); }
 .handover__reason { overflow-wrap: anywhere; }
@@ -822,7 +815,6 @@ body {
   min-height: 56px;
   padding: 8px 16px;
   border: 0;
-  border-left: 4px solid transparent;
   background: transparent;
   text-align: left;
 }
@@ -834,7 +826,6 @@ body {
 .pt-row__qty { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pt-row__qty b { font-size: 1.1em; }
 .pt-row__min { font-size: max(14px, .85em); color: var(--muted); text-align: right; white-space: nowrap; }
-.pt-row.is-low { border-left-color: var(--warning-line); }
 .warn-icon {
   display: inline-grid;
   place-items: center;
@@ -880,7 +871,6 @@ body {
 .pt-warn {
   margin: 0;
   padding: 8px 12px;
-  border-left: 4px solid var(--warning-line);
   border-radius: 8px;
   background: var(--warning-soft);
 }
@@ -980,7 +970,6 @@ body {
 .kb-note {
   margin: 0;
   padding: 10px 14px;
-  border-left: 4px solid var(--muted);
   border-radius: 8px;
   background: var(--surface-2);
   font-size: .9em;
@@ -991,13 +980,9 @@ body {
 .kb-list { display: grid; gap: 8px; }
 .kb-card {
   border: 1px solid var(--border);
-  border-left: 4px solid var(--muted);
   border-radius: var(--radius);
   background: var(--surface);
 }
-.kb-card--alarm { border-left-color: var(--danger); }
-.kb-card--warning { border-left-color: var(--warning-line); }
-.kb-card--symptom { border-left-color: var(--muted); }
 .kb-card__head {
   display: flex;
   flex-wrap: wrap;
@@ -1161,7 +1146,6 @@ body.is-viewer #btn-edit { display: none !important; }
   width: 100%;
   padding: 14px 16px;
   border: 1px solid var(--danger);
-  border-left-width: 4px;
   border-radius: var(--radius);
   background: var(--danger-soft);
   text-align: left;
