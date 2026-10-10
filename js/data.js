@@ -18,6 +18,7 @@ function emptyData() {
     repairs: [],        // заявки на ремонт: priority 'urgent' | 'planned'
     parts: [],          // склад: { id, group, kind, name, article, qty, unit, min }
     manuals: [],        // мануалы
+    feedback: [],       // замечания мастеров: { id, at, kind, text, tab, master, shiftId, status }
     settings: defaultSettings(), // данные смен: мастера, номера, время
   };
 }

@@ -510,7 +510,7 @@ function renderTab() {
   }
 
   const edit = $('#btn-edit');
-  edit.hidden = !state.admin || tab.id === 'shifts' || tab.id === 'manuals';
+  edit.hidden = !state.admin || tab.id === 'shifts' || tab.id === 'manuals' || tab.id === 'feedback';
   edit.classList.toggle('is-active', editing);
   edit.querySelector('.edit-btn__label').textContent = edit.title = editing ? 'Готово' : 'Редактировать';
 }
@@ -715,7 +715,7 @@ function equipmentDetails(eq, s) {
 
 const TAB_VIEWS = {
   equipment: equipmentView, current: currentShiftView, history: historyView,
-  repair: repairView, warehouse: warehouseView, manuals: manualsView, shifts: shiftsSettingsView,
+  repair: repairView, warehouse: warehouseView, manuals: manualsView, shifts: shiftsSettingsView, feedback: feedbackView,
 };
 
 // ================= История смен =================
@@ -2727,6 +2727,91 @@ if ($('#screen-main').hidden) showStartScreen();
 
 // ================= OneDrive =================
 OneDrive.onChange(renderSaveStatus);
+// ================= Замечания =================
+// Мастер пишет замечание из любого места (в том числе в режиме зрителя); читает, ведёт статусы и удаляет их только режим настроек.
+// Запись: { id, at, kind, text, tab, master, shiftId, status }. Вкладка, мастер и смена подставляются сами.
+function openFeedbackForm() {
+  let kind = 'hard';
+  const kinds = Object.entries(CONFIG.feedbackKinds)
+    .map(([id, label]) => `<button type="button" class="chip${id === kind ? ' is-active' : ''}" data-fb-kind="${id}">${label}</button>`).join('');
+  openModal('Замечание', `
+    <div class="field">
+      <span class="field__label">Что это</span>
+      <div class="chips" id="fb-kind">${kinds}</div>
+    </div>
+    <label class="field">
+      <span class="field__label">Что не так или что предлагаете</span>
+      <textarea id="fb-text" rows="5" placeholder="Опишите своими словами"></textarea>
+    </label>
+    <p class="muted">Вкладка и смена записываются сами. Замечание увидит разработчик.</p>
+    <p class="error" id="fb-error" aria-live="polite" hidden></p>`, [
+    { label: 'Отмена' },
+    {
+      label: 'Отправить', primary: true,
+      onClick: () => {
+        const text = $('#fb-text').value.trim();
+        if (!text) { fieldError('#fb-text', 'Напишите, в чём дело.', '#fb-error'); return false; }
+        const shift = DB.data.currentShift;
+        const tab = visibleTabs().find((t) => t.id === state.tab);
+        DB.update((d) => {
+          d.feedback.push({
+            id: uid(), at: new Date().toISOString(), kind, text,
+            tab: tab ? tab.title : '', master: shift ? shift.master : '', shiftId: shift ? shift.id : null, status: 'new',
+          });
+        });
+        openModal('Спасибо', '<p>Замечание отправлено разработчику.</p>', [{ label: 'Закрыть', primary: true }]);
+        return false;
+      },
+    },
+  ], { fill: true });
+  $('#fb-kind').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-fb-kind]');
+    if (!chip) return;
+    kind = chip.dataset.fbKind;
+    $('#fb-kind').querySelectorAll('.chip').forEach((c) => c.classList.toggle('is-active', c === chip));
+  });
+  $('#fb-text').focus();
+}
+$('#btn-feedback').addEventListener('click', openFeedbackForm);
+
+function feedbackView() {
+  const list = [...DB.data.feedback].sort((a, b) => (a.status === 'done') - (b.status === 'done') || b.at.localeCompare(a.at));
+  if (!list.length) return `<div class="empty"><div class="empty__icon">${ICONS.feedback}</div><p>Замечаний пока нет.</p></div>`;
+  const fresh = list.filter((f) => f.status === 'new').length;
+  return `
+    <p class="muted">Всего: ${list.length} · новых: ${fresh}</p>
+    <div class="fb-list">
+      ${list.map((f) => `
+        <article class="fb-item${f.status === 'done' ? ' is-done' : ''}">
+          <div class="fb-item__head">
+            <span class="fb-item__kind">${escapeHtml(CONFIG.feedbackKinds[f.kind] || f.kind)}</span>
+            <span>${fmtDateTime(f.at)}</span>
+            ${f.master ? `<span>мастер ${escapeHtml(f.master)}</span>` : ''}
+            ${f.tab ? `<span>вкладка «${escapeHtml(f.tab)}»</span>` : ''}
+          </div>
+          <div class="fb-item__text">${escapeHtml(f.text)}</div>
+          <div class="fb-item__foot">
+            <div class="chips">
+              ${Object.entries(CONFIG.feedbackStatuses).map(([id, label]) =>
+                `<button type="button" class="chip${f.status === id ? ' is-active' : ''}" data-fb-status="${id}" data-id="${f.id}">${label}</button>`).join('')}
+            </div>
+            <button class="trash trash--sm" data-fb-del="${f.id}" title="Удалить" aria-label="Удалить замечание">${ICONS.trash}</button>
+          </div>
+        </article>`).join('')}
+    </div>`;
+}
+
+$('#panel').addEventListener('click', (e) => {
+  const st = e.target.closest('[data-fb-status]');
+  if (st) return DB.update((d) => { const f = d.feedback.find((x) => x.id === st.dataset.id); if (f) f.status = st.dataset.fbStatus; });
+  const del = e.target.closest('[data-fb-del]');
+  if (!del) return;
+  openModal('Удалить замечание?', '<p>Замечание будет удалено без возможности восстановления.</p>', [
+    { label: 'Отмена' },
+    { label: 'Удалить', danger: true, onClick: () => DB.update((d) => { d.feedback = d.feedback.filter((x) => x.id !== del.dataset.fbDel); }) },
+  ]);
+});
+
 OneDrive.init();
 
 // ================= Офлайн-режим =================
