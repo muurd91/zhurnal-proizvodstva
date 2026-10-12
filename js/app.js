@@ -20,8 +20,9 @@ const state = {
   tab: store.get('tab', 'current'),
   eqPeriod: store.get('eqPeriod', '30'), // период статистики в перечне оборудования
   historyLimit: 20,                      // сколько смен показано в истории
-  eqOpen: new Set(),                     // раскрытые строки в перечне оборудования
-  eqGroupsOpen: new Set(),               // раскрытые подгруппы в перечне; при входе во вкладку всё свёрнуто
+  eqView: store.get('eqView', 'status'), // вкладка «Оборудование»: 'status' (плитки) или 'stats' (таблица)
+  eqFilter: 'all',                       // фильтр по состоянию: all | ok | maintenance | repair
+  eqQuery: '',                           // поиск по названию, маркировке, инв. номеру (не сохраняется)
   histOpen: new Set(),                   // раскрытые смены в истории (не сохраняется)
   histSeeded: new Set(),                 // смены, которым уже выставили раскрытие по умолчанию
   admin: false,                     // режим настроек: переживает обновление страницы, но не закрытие приложения
@@ -454,7 +455,7 @@ function getBadges() {
 
 // Переход на вкладку (из меню или по ссылке внутри панели).
 function goTab(id) {
-  if (id !== state.tab) state.eqGroupsOpen.clear(); // перечень оборудования каждый раз открывается свёрнутым
+  if (id !== state.tab) { state.eqFilter = 'all'; state.eqQuery = ''; } // вкладка «Оборудование» открывается без фильтров
   state.tab = id;
   state.editing = false;
   store.set('tab', state.tab);
@@ -538,9 +539,18 @@ const getGroups = () => [...new Set(getEquipment().map((e) => e.group))];
 // Станки внутри группы: по позиции в цеху (без позиции — в конце), затем по имени («№2» раньше «№10»).
 const byPos = (a, b) => (a.pos ?? Infinity) - (b.pos ?? Infinity) || a.name.localeCompare(b.name, 'ru', { numeric: true });
 
+// Состояние станка по открытой записи: работает / обслуживание / в ремонте.
+const eqKind = (s) => (!s.inRepair ? 'ok' : isMaint(s.inRepair) ? 'maintenance' : 'repair');
+const EQ_FILTERS = [
+  { id: 'all', label: 'Все' },
+  { id: 'ok', label: 'Работает', kind: 'ok' },
+  { id: 'maintenance', label: 'Обслуживание', kind: 'maint' },
+  { id: 'repair', label: 'В ремонте', kind: 'bad' },
+];
+const EQ_STATE_LABEL = { ok: 'Работает', maintenance: 'Обслуживание', repair: 'В ремонте' };
+
 function equipmentView() {
-  const list = getEquipment();
-  if (!list.length) {
+  if (!getEquipment().length) {
     return `
       <div class="empty">
         <div class="empty__icon">${ICONS.equipment}</div>
@@ -548,58 +558,133 @@ function equipmentView() {
         <p class="muted">${state.admin ? 'Нажмите «Редактировать», чтобы внести первое оборудование.' : 'Добавить его можно в режиме настроек.'}</p>
       </div>`;
   }
-  const from = periodStart();
-  const stats = new Map(list.map((e) => [e.id, eqStats(e.id, from)]));
-  const all = [...stats.values()];
-  const repairN = all.filter((s) => s.inRepair && !isMaint(s.inRepair)).length;
-  const maintN = all.filter((s) => s.inRepair && isMaint(s.inRepair)).length;
+  const views = [{ id: 'status', label: 'Состояние' }, { id: 'stats', label: 'Статистика' }];
+  return `
+    <div class="eq-bar">
+      <div class="segmented segmented--inline">
+        ${views.map((v) => `<button class="segmented__btn${v.id === state.eqView ? ' is-active' : ''}" data-eq-view="${v.id}">${v.label}</button>`).join('')}
+      </div>
+      <input class="eq-search" id="eq-search" type="search" placeholder="Поиск: название, маркировка, инв. №" value="${escapeHtml(state.eqQuery)}" autocomplete="off">
+    </div>
+    <div id="eq-results">${eqResults()}</div>`;
+}
 
-  const tiles = `
-    <div class="stat-row">
-      ${statTile('Работает', `${list.length - repairN - maintN} из ${list.length}`)}
-      ${statTile('В ремонте', repairN, repairN ? 'bad' : '')}
-      ${statTile('Обслуживание', maintN, maintN ? 'maint' : '')}
-      ${statTile(`Поломок · ${periodLabel()}`, all.reduce((n, s) => n + s.count, 0))}
-      ${statTile(`Простой · ${periodLabel()}`, fmtDuration(all.reduce((n, s) => n + s.downtime, 0)))}
+// Содержимое под поиском: перерисовывается отдельно, чтобы поле не теряло фокус при вводе.
+function eqResults() {
+  const list = getEquipment();
+  const stats = new Map(list.map((e) => [e.id, eqStats(e.id, periodStart())]));
+  const q = state.eqQuery.trim().toLowerCase();
+  const shown = list.filter((e) => !q || [e.name, e.mark, e.inv, e.group].some((v) => String(v ?? '').toLowerCase().includes(q)));
+  return state.eqView === 'stats' ? eqStatsView(shown, stats) : eqStatusView(shown, stats);
+}
+
+// Главный вид: что стоит сейчас, а ниже — все станки по подгруппам, в порядке цеха.
+function eqStatusView(shown, stats) {
+  const filter = state.eqFilter;
+  const count = (id) => (id === 'all' ? shown.length : shown.filter((e) => eqKind(stats.get(e.id)) === id).length);
+  const filters = `
+    <div class="stat-row eq-filters">
+      ${EQ_FILTERS.map((f) => `
+        <button class="stat stat--btn${f.kind ? ` stat--${f.kind}` : ''}${f.id === filter ? ' is-active' : ''}" data-eq-filter="${f.id}" aria-pressed="${f.id === filter}">
+          <span class="stat__label">${f.label}</span>
+          <span class="stat__value">${count(f.id)}</span>
+        </button>`).join('')}
     </div>`;
 
-  // Внутри подгруппы: сначала то, что в ремонте, потом самые проблемные.
+  if (!shown.length) return filters + '<p class="muted bd-none">Ничего не найдено.</p>';
+
+  const problem = (e) => stats.get(e.id).inRepair;
+  const attention = shown.filter(problem).sort((a, b) =>
+    (isMaint(problem(a)) ? 1 : 0) - (isMaint(problem(b)) ? 1 : 0) || problem(a).start.localeCompare(problem(b).start));
+  const strip = filter !== 'all' ? '' : attention.length
+    ? `<section class="eq-attn">
+         <h3 class="eq-group__title">Требует внимания · ${attention.length}</h3>
+         <div class="eq-alerts">${attention.map((e) => eqAlert(e, stats.get(e.id))).join('')}</div>
+       </section>`
+    : '<p class="eq-allok"><span class="dot dot--ok"></span> Всё работает</p>';
+
+  const groups = getGroups().map((g) => {
+    const items = shown.filter((e) => e.group === g && (filter === 'all' || eqKind(stats.get(e.id)) === filter)).sort(byPos);
+    if (!items.length) return '';
+    return `
+      <section class="eq-group">
+        <h3 class="eq-group__title">${escapeHtml(g || 'Без подгруппы')} · ${items.length}</h3>
+        <div class="eq-tiles">${items.map((e) => eqTile(e, stats.get(e.id))).join('')}</div>
+      </section>`;
+  }).join('');
+  return filters + strip + groups;
+}
+
+const eqDuration = (s) => fmtDuration(Date.now() - new Date(s.inRepair.start));
+
+function eqAlert(e, s) {
+  const kind = eqKind(s);
+  return `
+    <button class="eq-alert eq-alert--${kind}" data-eq="${e.id}">
+      <span class="eq-alert__head">
+        <span class="dot dot--${kind}"></span>
+        <span class="eq-alert__name">${escapeHtml(e.name)}</span>
+        ${e.mark ? `<span class="mark-tag">${escapeHtml(e.mark)}</span>` : ''}
+      </span>
+      <span class="eq-alert__reason">${escapeHtml(s.inRepair.reason)}</span>
+      <span class="eq-alert__state">${EQ_STATE_LABEL[kind]} · ${eqDuration(s)}</span>
+    </button>`;
+}
+
+function eqTile(e, s) {
+  const kind = eqKind(s);
+  return `
+    <button class="eq-tile eq-tile--${kind}" data-eq="${e.id}" aria-label="${escapeHtml(e.name)}: ${EQ_STATE_LABEL[kind].toLowerCase()}">
+      <span class="eq-tile__head">
+        <span class="eq-tile__name">${escapeHtml(e.name)}</span>
+        <span class="dot dot--${kind}"></span>
+      </span>
+      <span class="eq-tile__sub">${kind === 'ok' ? escapeHtml(e.mark || '') : `${EQ_STATE_LABEL[kind]} · ${eqDuration(s)}`}</span>
+    </button>`;
+}
+
+// Статистика за период: итоги и таблица по подгруппам. Строка открывает карточку станка.
+function eqStatsView(shown, stats) {
+  const all = shown.map((e) => stats.get(e.id));
+  const repaired = all.filter((s) => s.avgRepair !== null);
+  const tiles = `
+    <div class="stat-row eq-stat-tiles">
+      ${statTile(`Поломок · ${periodLabel()}`, all.reduce((n, s) => n + s.count, 0))}
+      ${statTile(`Простой · ${periodLabel()}`, fmtDuration(all.reduce((n, s) => n + s.downtime, 0)))}
+      ${statTile('Средний ремонт', repaired.length ? fmtDuration(repaired.reduce((n, s) => n + s.avgRepair, 0) / repaired.length) : '—')}
+    </div>`;
+  const head = `
+    <div class="eq-head">
+      <span>Оборудование</span><span>Маркировка</span><span>Состояние</span><span>Поломок</span><span>Простой</span><span>Последняя поломка</span><span></span>
+    </div>`;
+  // Внутри подгруппы: самые проблемные сверху.
   const order = (a, b) => {
     const sa = stats.get(a.id), sb = stats.get(b.id);
     return (sb.inRepair ? 1 : 0) - (sa.inRepair ? 1 : 0) || sb.downtime - sa.downtime || byPos(a, b);
   };
-
-  // Заголовки колонок — первой строкой в карточке каждой группы.
-  const head = `
-    <div class="eq-head">
-      <span>Оборудование</span><span>Маркировка</span><span>Состояние</span><span>Поломок</span><span>Простой</span><span>Последняя</span><span></span>
-    </div>`;
-
-  return periodSwitch() + tiles + getGroups().map((g) => {
-    const items = list.filter((e) => e.group === g);
-    const open = state.eqGroupsOpen.has(String(g)); // ключ — строка из data-атрибута, даже если у записи нет подгруппы
-    const rep = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && !isMaint(r); }).length;
-    const mnt = items.filter((e) => { const r = stats.get(e.id).inRepair; return r && isMaint(r); }).length;
-    const count = (kind, n, label) => `<span class="eq-count${n ? '' : ' is-zero'}"><span class="dot dot--${kind}"></span><b>${n}</b> ${label}</span>`;
+  const groups = getGroups().map((g) => {
+    const items = shown.filter((e) => e.group === g).sort(order);
+    if (!items.length) return '';
     return `
-    <section class="eq-group eq-group--card${open ? ' is-open' : ''}">
-      <h3 class="eq-group__title">
-        <button class="eq-group__toggle" data-eq-group="${escapeHtml(g)}" aria-expanded="${open}">
-          <span class="eq-group__name">${escapeHtml(g || 'Без подгруппы')}</span>
-          <span class="eq-group__counts">
-            ${count('ok', items.length - rep - mnt, 'работает')}
-            ${count('maintenance', mnt, 'обслуживание')}
-            ${count('repair', rep, 'в ремонте')}
-          </span>
-          <span class="eq-group__chev">${ICONS.chevron}</span>
-        </button>
-      </h3>
-      ${open ? `<div class="eq-rows">
-        ${head}
-        ${items.sort(order).map((e) => equipmentRow(e, stats.get(e.id))).join('')}
-      </div>` : ''}
-    </section>`;
+      <section class="eq-group">
+        <h3 class="eq-group__title">${escapeHtml(g || 'Без подгруппы')} · ${items.length}</h3>
+        <div class="eq-rows">${head}${items.map((e) => equipmentRow(e, stats.get(e.id))).join('')}</div>
+      </section>`;
   }).join('');
+  return periodSwitch() + tiles + (groups || '<p class="muted bd-none">Ничего не найдено.</p>');
+}
+
+// Карточка станка: паспорт, показатели, история. Отсюда же можно записать поломку.
+function openEquipmentCard(id) {
+  const eq = getEquipment().find((x) => x.id === id);
+  if (!eq) return;
+  const s = eqStats(id, periodStart());
+  const kind = eqKind(s);
+  const actions = [{ label: 'Закрыть' }];
+  if (!state.viewer) actions.push({ label: 'Записать поломку', primary: true, onClick: () => { openBreakdownForm(null, id); return false; } });
+  openModal(eq.name, `
+    <p class="eq-card__state"><span class="dot dot--${kind}"></span> ${EQ_STATE_LABEL[kind]}${s.inRepair ? ` · ${eqDuration(s)}` : ''}</p>
+    ${equipmentDetails(eq, s)}`, actions, { wide: true });
 }
 
 // ---------- Статистика по оборудованию ----------
@@ -662,14 +747,13 @@ const statTile = (label, value, tone = '') => `
     <span class="stat__value">${value}</span>
   </div>`;
 
-// Строка перечня; нажатие раскрывает под ней полную историю станка.
+// Строка таблицы статистики; нажатие открывает карточку станка.
 function equipmentRow(e, s) {
-  const open = state.eqOpen.has(e.id);
   const repair = !!s.inRepair;
-  const kind = !repair ? 'ok' : isMaint(s.inRepair) ? 'maintenance' : 'repair';
+  const kind = eqKind(s);
   return `
-    <div class="eq-entry${open ? ' is-open' : ''}">
-      <button class="eq-row eq-row--${kind}" data-eq="${e.id}" aria-expanded="${open}">
+    <div class="eq-entry">
+      <button class="eq-row eq-row--${kind}" data-eq="${e.id}">
         <span class="eq-row__name">
           <span class="bd-item__name">${escapeHtml(e.name)}</span>
           <span class="eq-row__sub">${repair ? escapeHtml(s.inRepair.reason) : e.inv ? `Инв. № ${escapeHtml(e.inv)}` : ''}</span>
@@ -677,7 +761,7 @@ function equipmentRow(e, s) {
         <span class="eq-row__mark">${e.mark ? `<span class="mark-tag">${escapeHtml(e.mark)}</span>` : ''}</span>
         <span class="eq-row__status">
           <span class="dot dot--${kind}"></span>
-          ${repair ? `${kind === 'maintenance' ? 'Обслуживание' : 'В ремонте'} · ${fmtDuration(Date.now() - new Date(s.inRepair.start))}` : 'Работает'}
+          ${repair ? `${EQ_STATE_LABEL[kind]} · ${eqDuration(s)}` : 'Работает'}
         </span>
         <span class="eq-row__nums">
           <span class="eq-row__num"><b>${s.count}</b><i> ${plural(s.count, 'поломка', 'поломки', 'поломок')}</i></span>
@@ -686,7 +770,6 @@ function equipmentRow(e, s) {
         </span>
         <span class="eq-row__chev">${ICONS.chevron}</span>
       </button>
-      ${open ? `<div class="eq-detail">${equipmentDetails(e, s)}</div>` : ''}
     </div>`;
 }
 
@@ -1120,19 +1203,28 @@ $('#panel').addEventListener('click', (e) => {
   const edit = e.target.closest('[data-eq-edit]');
   if (edit) return openEquipmentForm(getEquipment().find((x) => x.id === edit.dataset.eqEdit));
 
-  const group = e.target.closest('[data-eq-group]');
-  if (group) {
-    const g = group.dataset.eqGroup;
-    if (state.eqGroupsOpen.has(g)) state.eqGroupsOpen.delete(g); else state.eqGroupsOpen.add(g);
+  const view = e.target.closest('[data-eq-view]');
+  if (view) {
+    state.eqView = view.dataset.eqView;
+    store.set('eqView', state.eqView);
+    return renderTab();
+  }
+
+  const filter = e.target.closest('[data-eq-filter]');
+  if (filter) {
+    state.eqFilter = state.eqFilter === filter.dataset.eqFilter ? 'all' : filter.dataset.eqFilter;
     return renderTab();
   }
 
   const item = e.target.closest('[data-eq]');
-  if (item) {
-    const id = item.dataset.eq;
-    if (state.eqOpen.has(id)) state.eqOpen.delete(id); else state.eqOpen.add(id);
-    renderTab();
-  }
+  if (item) return openEquipmentCard(item.dataset.eq);
+});
+
+// Поиск по оборудованию: перерисовываем только список под полем, чтобы не терять фокус.
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'eq-search') return;
+  state.eqQuery = e.target.value;
+  $('#eq-results').innerHTML = eqResults();
 });
 
 // В режиме редактирования (режим настроек + «Редактировать») рядом с поломкой — корзина.
@@ -1360,7 +1452,7 @@ const knownRepairers = () =>
 function openBreakdownForm(bd = null, eqId = null) {
   const eqList = DB.data.equipment;
   if (!eqList.length) {
-    openModal('Добавить поломку', '<p>В перечне ещё нет оборудования.</p><p class="muted">Сначала добавьте его во вкладке «Перечень оборудования» в режиме настроек.</p>', [
+    openModal('Добавить поломку', '<p>В перечне ещё нет оборудования.</p><p class="muted">Сначала добавьте его во вкладке «Оборудование» в режиме настроек.</p>', [
       { label: 'Понятно', primary: true },
     ]);
     return;
@@ -1828,7 +1920,7 @@ function usedLine(used = [], note = '') {
 function openRepairForm(r = null) {
   const eqList = DB.data.equipment;
   if (!eqList.length) {
-    openModal('Заявка на ремонт', '<p>В перечне ещё нет оборудования.</p><p class="muted">Сначала добавьте его во вкладке «Перечень оборудования» в режиме настроек.</p>', [
+    openModal('Заявка на ремонт', '<p>В перечне ещё нет оборудования.</p><p class="muted">Сначала добавьте его во вкладке «Оборудование» в режиме настроек.</p>', [
       { label: 'Понятно', primary: true },
     ]);
     return;

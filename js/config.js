@@ -52,7 +52,7 @@ const CONFIG = {
   tabs: [
     { id: 'current',   label: 'Смена',        title: 'Текущая смена',         icon: 'current',   fab: 'Остановка' },
     { id: 'history',   label: 'История',      title: 'История смен',          icon: 'history' },
-    { id: 'equipment', label: 'Оборудование', title: 'Перечень оборудования', icon: 'equipment' },
+    { id: 'equipment', label: 'Оборудование', title: 'Оборудование', icon: 'equipment' },
     { id: 'repair',    label: 'Заявки',       title: 'Необходимый ремонт',    icon: 'repair',    fab: 'Заявка' },
     { id: 'warehouse', label: 'Склад',        title: 'Склад',                 icon: 'warehouse', fab: 'Запчасть' },
     { id: 'manuals',   label: 'Мануалы',      title: 'Мануалы',               icon: 'manuals' },

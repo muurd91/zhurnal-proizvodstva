@@ -448,50 +448,6 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   letter-spacing: .06em;
   color: var(--muted);
 }
-/* Заголовок подгруппы — кнопка сворачивания: название, счётчики по статусам, стрелка */
-/* Сетка, а не flex с переносом: в узкой панели переносятся только счётчики, стрелка остаётся справа */
-.eq-group__toggle {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 18px;
-  width: 100%;
-  min-height: var(--touch);
-  padding: 6px 8px 6px 4px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  text-align: left;
-}
-@media (hover: hover) { .eq-group__toggle:hover { background: var(--surface-2); } }
-/* Подгруппа — одна карточка-«таблетка»: свёрнутая это овал с заголовком, раскрытая растягивается вместе со списком.
-   Заголовок отделён от списка линией и своим фоном. */
-.eq-group--card {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  overflow: hidden;
-}
-.eq-group--card + .eq-group--card { margin-top: 12px; }
-.eq-group--card.is-open { border-radius: 24px; }
-.eq-group--card .eq-group__title { margin: 0; }
-.eq-group--card .eq-group__toggle { padding: 6px 18px 6px 22px; border-radius: 0; }
-.eq-group--card.is-open .eq-group__toggle { background: var(--surface-2); border-bottom: 2px solid var(--border); }
-@media (hover: hover) { .eq-group--card:not(.is-open) .eq-group__toggle:hover { background: var(--surface-2); } }
-.eq-group--card .eq-rows { border: 0; border-radius: 0; }
-.eq-group--card .eq-head { background: var(--surface); } /* заголовок подгруппы уже серый — шапка колонок не дублирует его */
-.eq-group__name { flex: 0 1 auto; }
-.eq-group__counts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-right: auto; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--text); }
-.eq-count { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.eq-count.is-zero { color: var(--muted); font-weight: 500; }
-.eq-count.is-zero .dot { opacity: .5; }
-.eq-group__chev { flex: none; width: 22px; height: 22px; color: var(--muted); transition: transform .2s; }
-.eq-group__chev svg { width: 100%; height: 100%; }
-.eq-group__toggle[aria-expanded="true"] .eq-group__chev { transform: rotate(180deg); }
 /* Список оборудования: одна строка — один станок, колонки выровнены по всему списку */
 .eq-head, .eq-row {
   display: grid;
@@ -571,9 +527,8 @@ body {
 .eq-row__num b { font-weight: 600; }
 .eq-row__last { font-size: .9em; color: var(--muted); font-variant-numeric: tabular-nums; }
 .eq-row i { display: none; font-style: normal; }
-.eq-row__chev { width: 22px; height: 22px; color: var(--muted); transition: transform .2s; }
+.eq-row__chev { width: 22px; height: 22px; color: var(--muted); transform: rotate(-90deg); }
 .eq-row__chev svg { width: 100%; height: 100%; }
-.eq-entry.is-open .eq-row__chev { transform: rotate(180deg); }
 .eq-detail {
   display: grid;
   gap: 14px;
@@ -1449,3 +1404,84 @@ button:focus-visible, .tab:focus-visible, .save-status:focus-visible { outline: 
   .tab.is-active { border-left-color: var(--active-border); }
   .tab--admin { border-left: 1px dashed var(--admin); }
 }
+
+/* ================= Вкладка «Оборудование»: состояние и статистика ================= */
+.eq-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 14px; }
+.eq-bar .segmented--inline .segmented__btn { padding: 0 18px; }
+.eq-search {
+  flex: 1 1 260px;
+  min-height: var(--touch);
+  padding: 0 16px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.eq-search::placeholder { color: var(--muted); }
+
+/* Плитки-счётчики — они же фильтры: повторное нажатие снимает фильтр */
+.stat--btn { width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.stat--btn:active { transform: scale(.98); }
+.stat--btn.is-active { box-shadow: 0 0 0 2px var(--active-border); }
+.stat--ok .stat__value::before { content: "● "; color: var(--ok); font-size: .7em; vertical-align: middle; }
+.eq-filters { margin-bottom: 18px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+/* «Требует внимания»: стоящие и обслуживаемые станки крупно, сразу под фильтрами */
+.eq-attn { margin-bottom: 26px; }
+.eq-alerts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.eq-alert {
+  display: grid;
+  gap: 4px;
+  min-height: 96px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-left-width: 8px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.eq-alert:active { transform: scale(.98); }
+.eq-alert--repair { border-color: var(--danger); background: var(--danger-soft); }
+.eq-alert--maintenance { border-color: var(--warning-line); background: var(--warning-soft); }
+.eq-alert__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.eq-alert__name { font-weight: 700; font-size: 1.1em; }
+.eq-alert__reason { color: var(--muted); font-size: max(14px, .9em); overflow-wrap: anywhere; }
+.eq-alert__state { margin-top: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.eq-alert--repair .eq-alert__state { color: var(--danger); }
+.eq-alert--maintenance .eq-alert__state { color: var(--warning-text); }
+.eq-allok { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; font-weight: 600; color: var(--ok); }
+
+/* Станки подгруппы — плитки в порядке цеха; нормальные — спокойные, цветом выделено только отклонение */
+.eq-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.eq-tile {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.eq-tile:active { transform: scale(.98); }
+@media (hover: hover) { .eq-tile:hover { background: var(--surface-2); } }
+.eq-tile__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.eq-tile__name { font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.eq-tile__head .dot { margin-top: 5px; }
+.eq-tile__sub { font-size: max(14px, .85em); color: var(--muted); overflow-wrap: anywhere; }
+.eq-tile--maintenance { background: var(--warning-soft); border-color: var(--warning-line); }
+.eq-tile--maintenance .eq-tile__sub { color: var(--warning-text); font-weight: 600; }
+.eq-tile--repair { background: var(--danger-soft); border-color: var(--danger); }
+.eq-tile--repair .eq-tile__sub { color: var(--danger); font-weight: 600; }
+@media (hover: hover) { .eq-tile--maintenance:hover { background: var(--warning-soft); } .eq-tile--repair:hover { background: var(--danger-soft); } }
+
+.eq-card__state { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 700; }
+.eq-stat-tiles { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
