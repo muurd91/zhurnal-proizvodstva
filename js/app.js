@@ -2984,6 +2984,53 @@ $('#panel').addEventListener('click', (e) => {
   ]);
 });
 
+// ================= Уведомления о действиях =================
+// Плашка в правом нижнем углу: что только что сделали на этом устройстве или пришло с другого.
+// События собирает Activity по разнице данных (js/activity.js).
+const TOAST_MS = 10000;   // сколько висит плашка
+const TOAST_MAX = 3;      // сколько плашек видно одновременно
+const TOAST_BATCH = 4;    // больше событий за раз — одна общая плашка
+const toastBootAt = Date.now();
+
+function showToast({ tone = 'info', title, detail = '', sub = '' }) {
+  let box = $('#toasts');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'toasts';
+    box.className = 'toasts';
+    box.setAttribute('aria-live', 'polite');
+    document.body.appendChild(box);
+  }
+  while (box.children.length >= TOAST_MAX) box.firstElementChild.remove();
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'toast';
+  el.innerHTML = `
+    <span class="dot dot--${tone === 'repair' ? 'repair' : tone === 'maintenance' ? 'maintenance' : tone === 'ok' ? 'ok' : 'info'}"></span>
+    <span class="toast__text">
+      <span class="toast__title">${escapeHtml(title)}</span>
+      ${detail ? `<span class="toast__detail">${escapeHtml(detail)}</span>` : ''}
+      ${sub ? `<span class="toast__sub">${escapeHtml(sub)}</span>` : ''}
+    </span>`;
+  const close = () => { clearTimeout(timer); el.remove(); };
+  const timer = setTimeout(close, TOAST_MS);
+  el.addEventListener('click', close); // нажатие убирает плашку сразу
+  box.appendChild(el);
+}
+
+DB.onActivity((events, source) => {
+  const remote = source === 'remote';
+  // Первые секунды после запуска приложение подтягивает накопленное с другого устройства — это не «новое».
+  if (remote && Date.now() - toastBootAt < 15000) return;
+  if (events.length >= TOAST_BATCH) {
+    showToast({ title: `Изменений: ${events.length}`, detail: remote ? 'Обновлено с другого устройства' : 'Данные обновлены' });
+    return;
+  }
+  for (const ev of events) {
+    showToast({ tone: ev.tone, title: ev.title, detail: ev.detail, sub: remote ? [ev.author, 'другое устройство'].filter(Boolean).join(' · ') : '' });
+  }
+});
+
 OneDrive.init();
 
 // ================= Офлайн-режим =================

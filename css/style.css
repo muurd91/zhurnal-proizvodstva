@@ -1484,3 +1484,39 @@ button:focus-visible, .tab:focus-visible, .save-status:focus-visible { outline: 
 
 .eq-card__state { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 700; }
 .eq-stat-tiles { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+
+/* ================= Уведомления о действиях (правый нижний угол) ================= */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 112px; /* выше круглой кнопки действия (FAB), чтобы не перекрывать её */
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  width: min(340px, calc(100vw - 32px));
+  pointer-events: none; /* между плашками клики проходят к интерфейсу */
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 6px 20px var(--shadow-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  animation: toast-in .25s ease-out;
+}
+.toast .dot { margin-top: 6px; }
+.dot--info { background: var(--muted); }
+.toast__text { display: grid; gap: 2px; min-width: 0; }
+.toast__title { font-weight: 700; }
+.toast__detail { overflow-wrap: anywhere; }
+.toast__sub { font-size: max(14px, .85em); color: var(--muted); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }

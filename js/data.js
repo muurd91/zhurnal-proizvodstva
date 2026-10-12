@@ -102,12 +102,18 @@ function migrateLegacy() {
 const DB = (() => {
   const backend = LocalBackend;
   const listeners = [];
+  const activityListeners = []; // уведомления о действиях: fn(events, source), source — local | remote
   let data;
 
   try { data = normalizeData(backend.load()); }
   catch { data = migrateLegacy(); backend.save(data); }
 
   const emit = () => listeners.forEach((fn) => fn(data));
+  const notifyActivity = (before, source) => {
+    if (!before) return;
+    const events = Activity.diff(before, data);
+    if (events.length) activityListeners.forEach((fn) => fn(events, source));
+  };
 
   let saveFailed = false; // последняя запись в хранилище не удалась
 
@@ -143,17 +149,21 @@ const DB = (() => {
 
     // Данные, пришедшие из облака: пишем локально и показываем, но обратно не отправляем.
     applyRemote(doc) {
+      const before = activityListeners.length ? Activity.snapshot(data) : null;
       data = normalizeData(doc);
       saveFailed = !backend.save(data);
       emit();
+      notifyActivity(before, 'remote');
     },
 
     // Все изменения — только через update: он ставит время, сохраняет и оповещает.
     update(fn) {
+      const before = activityListeners.length ? Activity.snapshot(data) : null;
       fn(data);
       data.updatedAt = new Date().toISOString();
       persist();
       emit();
+      notifyActivity(before, 'local');
     },
 
     // Полная замена (загрузка файла).
@@ -164,6 +174,7 @@ const DB = (() => {
     },
 
     onChange(fn) { listeners.push(fn); },
+    onActivity(fn) { activityListeners.push(fn); },
 
     exportFile() {
       const d = new Date();
