@@ -1436,7 +1436,6 @@ button:focus-visible, .tab:focus-visible, .save-status:focus-visible { outline: 
   min-height: 96px;
   padding: 12px 16px;
   border: 1px solid var(--border);
-  border-left-width: 8px;
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
