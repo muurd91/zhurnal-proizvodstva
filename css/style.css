@@ -133,7 +133,6 @@ button { cursor: pointer; }
 }
 .card--form { display: grid; gap: 20px; }
 .card__title { margin: 0; font-size: 1.4em; }
-.card--start .card__title { color: var(--brand); }
 
 /* Логотип: на стартовом экране полноцветный, внутри приложения одноцветный (красный и зелёный в интерфейсе заняты статусами) */
 .logo { color: var(--text); }
@@ -143,11 +142,12 @@ button { cursor: pointer; }
 .logo__t { fill: currentColor; }
 .logo--mono .logo__g, .logo--mono .logo__r { fill: currentColor; }
 .start-logo { width: clamp(150px, 52%, 220px); }
-/* Знак — в свободном месте между «Мануалами» и «Настройками», по центру; пока полноцветный (эксперимент: серый был .logo--mono с opacity .3).
-   Если места мало (контейнер ниже ~100px), скрывается. */
+/* Логотип в меню — целиком (знак + AMINA), в цвете, но не шире 120px: во всю ширину он был самым ярким пятном экрана,
+   а одноцветный маленький знак расплывался в пятно. Стоит в свободном месте между «Мануалами» и «Настройками»;
+   если места мало — скрывается. */
 .nav__logo-area { flex: 1 1 0; min-height: 0; display: grid; place-items: center; padding: 12px 0; container-type: size; }
-/* Ширина — как у кнопки вкладки; если по высоте не помещается, уменьшается пропорционально (1.13 — соотношение сторон знака) */
-.nav__logo { width: min(100%, calc(100cqh * 1.13)); pointer-events: none; }
+/* 1.06 — соотношение сторон логотипа: по высоте не помещается — уменьшается пропорционально */
+.nav__logo { width: min(120px, 100%, calc(100cqh * 1.06)); pointer-events: none; }
 @container (max-height: 100px) { .nav__logo { display: none; } }
 .card__actions {
   display: flex;
@@ -155,6 +155,8 @@ button { cursor: pointer; }
   gap: 12px;
   margin-top: 8px;
 }
+/* Кнопки одной строки — одной формы: «Назад» тоже овальная и той же высоты, что «Начать смену» */
+.card__actions .btn { min-height: 64px; border-radius: 999px; }
 
 /* ================= Поля ================= */
 .field { display: grid; gap: 6px; }
@@ -233,8 +235,8 @@ button { cursor: pointer; }
   grid-template-columns: var(--side) minmax(0, 1fr) auto;
   grid-template-rows: auto 1fr;
   grid-template-areas:
-    "clock info end"
-    "nav   panel panel";
+    "info info  end"
+    "nav  panel panel";
   gap: var(--gap);
   padding: var(--gap) var(--gap) 0 0;
 }
@@ -245,28 +247,27 @@ button { cursor: pointer; }
   border-radius: var(--radius);
 }
 
-/* Часы с календарём */
-.app__clock {
-  grid-area: clock;
-  margin-left: var(--gap);
-  padding: 12px 8px;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  text-align: center;
-  min-height: clamp(90px, 14vh, 170px);
-}
-.clock__time { font-size: clamp(1.4em, 3.4vmin, 2.6em); font-weight: 700; font-variant-numeric: tabular-nums; }
-.clock__date { font-size: max(14px, .85em); margin-top: 4px; }
-.clock__weekday { font-size: max(14px, .8em); color: var(--muted); }
-
-/* Информация о смене */
+/* Шапка: часы слева и информация о смене — одним блоком (раньше часы были отдельной карточкой над меню) */
 .app__info {
   grid-area: info;
   min-width: 0;
-  padding: 12px 20px;
+  margin-left: var(--gap);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.info__clock {
+  flex: none;
+  padding-right: 20px;
+  border-right: 1px solid var(--border);
+}
+.clock__time { font-size: 2em; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.clock__date { margin-top: 4px; font-size: max(14px, .8em); color: var(--muted); white-space: nowrap; }
+.info__shift {
+  flex: 1;
+  min-width: 0;
   display: grid;
-  align-content: center;
   justify-items: center;
   text-align: center;
   gap: 2px;
@@ -309,10 +310,6 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
 .save-status--error, .save-status--offline, .save-status--auth, .save-status--cloudError { color: var(--danger); font-weight: 700; }
 .save-status--error::before, .save-status--offline::before, .save-status--auth::before, .save-status--cloudError::before { content: "▲ "; }
 .od-error { color: var(--danger); font-weight: 700; overflow-wrap: anywhere; }
-/* «Написать замечание» — тихая ссылка под индикатором, не конкурирует с «Закончить смену» */
-.link-btn { min-height: 32px; padding: 0 6px; border: 0; background: none; color: var(--muted); font-size: max(14px, .9em); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* Список замечаний в режиме настроек */
 /* В окне замечания: к какой странице оно привязано */
 .fb-context { display: grid; gap: 2px; padding: 10px 14px; border-radius: var(--radius); background: var(--surface-2); }
 .fb-context__label { font-size: .85em; color: var(--muted); }
@@ -331,7 +328,7 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 10vh 0 var(--gap);
+  padding: 4px 0 var(--gap); /* вкладки сразу под шапкой, без пустого поля сверху */
   min-height: 0;
   overflow-y: auto; /* на невысоком экране вкладки прокручиваются, а не уходят за край */
   overflow-x: hidden;
@@ -452,9 +449,10 @@ body.is-admin .panel__title { padding-right: 180px; } /* не заезжать �
   color: var(--muted);
 }
 /* Заголовок подгруппы — кнопка сворачивания: название, счётчики по статусам, стрелка */
+/* Сетка, а не flex с переносом: в узкой панели переносятся только счётчики, стрелка остаётся справа */
 .eq-group__toggle {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 4px 18px;
   width: 100%;
@@ -733,15 +731,13 @@ body {
   background: transparent;
   text-align: left;
 }
-/* Строки истории — тоже заливаются цветом статуса */
+/* Строки истории заливаются цветом статуса, только если запись не закрыта; закрытая — норма, без заливки */
 .hist-row--repair { background: var(--danger-soft); }
 .hist-row--maintenance { background: var(--warning-soft); }
-.hist-row--done { background: var(--ok-soft); }
 @media (hover: hover) {
   .hist-row:hover { background: var(--surface-2); }
   .hist-row--repair:hover { background: color-mix(in srgb, var(--danger) 16%, var(--surface)); }
   .hist-row--maintenance:hover { background: color-mix(in srgb, var(--warning) 28%, var(--surface)); }
-  .hist-row--done:hover { background: color-mix(in srgb, var(--ok) 18%, var(--surface)); }
 }
 .hist-row__time { display: grid; font-weight: 700; font-variant-numeric: tabular-nums; }
 .hist-row__time small { font-size: max(14px, .8em); font-weight: 600; }
@@ -945,7 +941,7 @@ body {
 .kb-search__field input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font-size: 1.1em; }
 .kb-search__field input::-webkit-search-cancel-button { display: none; } /* своя кнопка очистки — крупнее */
 .kb-search__clear { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--muted); font-size: 1em; }
-.kb-search__maker { min-height: var(--touch-lg); padding: 0 14px; border: 1px solid var(--field-border); border-radius: var(--radius); background: var(--surface); }
+.kb-search__maker { min-height: var(--touch-lg); padding: 0 18px; border: 1px solid var(--field-border); border-radius: 999px; background: var(--surface); } /* овальный, как поле поиска рядом */
 .kb-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
 .kb-filter__off { min-height: 40px; padding: 0 14px; }
 @media (max-width: 700px) { .kb-search { grid-template-columns: minmax(0, 1fr); } }
@@ -1156,9 +1152,10 @@ body.is-viewer #btn-edit { display: none !important; }
   background: var(--danger-soft);
   text-align: left;
 }
-/* Обводка и заливка — в цвет статуса: ремонт красный, обслуживание жёлтый, завершённое (отремонтировано/обслужено) зелёный */
+/* Обводка и заливка — в цвет статуса: ремонт красный, обслуживание жёлтый. Завершённое — норма (ISA-101):
+   без заливки, зелёная только галочка в плашке, чтобы не спорить по весу с тем, что стоит. */
 .bd-item--maintenance { border-color: var(--warning-line); background: var(--warning-soft); }
-.bd-item--done { border-color: var(--ok); background: var(--ok-soft); }
+.bd-item--done { border-color: var(--border); background: var(--surface); }
 @media (hover: hover) { button.bd-item:hover { border-color: var(--accent); } }
 .bd-item__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; }
 .bd-item__head > :first-child { flex: 1 1 160px; }
@@ -1189,10 +1186,12 @@ body.is-viewer #btn-edit { display: none !important; }
 .bd-status--wait { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
 .bd-status--urgent { background: var(--warning); color: var(--on-warning); }
 
-/* Заявки на ремонт — «требует внимания», не авария. Специфичнее .bd-item, иначе полоса перебивается. */
-.bd-item.rq-item--open { border-color: var(--warning-line); background: var(--warning-soft); }
-.bd-item.rq-item--done { border-color: var(--ok); background: var(--ok-soft); }
-.bd-status--done { background: var(--ok); color: var(--on-ok); }
+/* Заявки на ремонт: плановая — обычная карточка, жёлтым выделена только срочная («требует внимания», не авария).
+   Специфичнее .bd-item, иначе рамка перебивается. */
+.bd-item.rq-item--open, .bd-item.rq-item--done { border-color: var(--border); background: var(--surface); }
+.bd-item.rq-item--urgent { border-color: var(--warning-line); background: var(--warning-soft); }
+.bd-status--done { background: transparent; border: 1px solid var(--ok); color: var(--ok); }
+.bd-status--done::before { content: "✓ "; }
 
 .empty {
   display: grid;
@@ -1270,12 +1269,27 @@ body.is-viewer #btn-edit { display: none !important; }
 }
 .machine__timer { margin-top: auto; font-size: 1.6em; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .machines-wrap { margin-bottom: 28px; }
+/* «Смена»: стоящие станки — крупные плитки, таймер простоя читается с нескольких метров */
+.machines--down { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.machines--down .machine { min-height: 160px; padding: 16px 18px; gap: 6px; }
+.machine__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; max-width: 100%; }
+.machines--down .machine__name { font-size: 1.15em; }
+.machine--down .machine__head .machine__mark { padding: 0 6px; border: 1px solid currentColor; border-radius: 6px; font-weight: 600; }
+.machines--down .machine__timer { font-size: 2.6em; }
+.machine__since { font-size: max(14px, .85em); opacity: .9; }
+@media (hover: hover) { .machine--down:hover { border-color: var(--text); } }
 /* Окно выбора станка: те же плитки, компактнее; стоящие — неактивны */
 .machines--pick { display: grid; gap: 14px; }
 .machines--pick .machines__group + .machines__group { margin-top: 0; }
 .machines--pick .machines { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 .machines--pick .machine { min-height: 64px; padding: 10px 12px; }
 .machines--pick .machine:disabled { cursor: not-allowed; opacity: .75; }
+/* Выбор станка в форме поломки: выбранный — как активная вкладка, уже стоящий — красный контур, нажать нельзя */
+#bd-group { margin-bottom: 4px; }
+.machines--pick .machine.is-active { background: var(--active-bg); border-color: var(--active-border); color: var(--active-text); }
+.machines--pick .machine.is-active .machine__mark { color: inherit; opacity: .8; }
+.machine--busy { background: var(--danger-soft); border-color: var(--danger); }
+.machine--busy .machine__mark { color: var(--danger); font-weight: 600; }
 .bd-none { margin: 0; }
 .empty--inline { margin: 24px 0 28px; }
 
@@ -1354,6 +1368,11 @@ body.is-viewer #btn-edit { display: none !important; }
 .field__error { color: var(--danger); font-size: max(14px, .85em); font-weight: 600; }
 .field__error::before { content: "▲ "; }
 .modal__actions--fill { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+/* Три и больше действий — стопкой на всю ширину, главное (последнее в списке) сверху */
+.modal__actions--stack { flex-direction: column-reverse; align-items: stretch; }
+.modal__actions--stack .btn--danger:first-child { margin-right: 0; }
+/* Главная кнопка, пока в окне не всё решено: приглушена, но нажимается — тогда подскажет, чего не хватает */
+.btn--primary.is-pending { opacity: .45; }
 .data-box {
   display: grid;
   gap: 10px;
@@ -1385,8 +1404,6 @@ body.is-viewer #btn-edit { display: none !important; }
 /* Горизонтальная ориентация и мониторы — раскладка как на ноутбуке */
 @media (orientation: landscape) {
   :root { --side: clamp(88px, 16vw, 220px); }
-  .app__nav { padding-top: 4vh; }
-  .app__clock { min-height: 0; }
 }
 
 /* Планшет (вертикальный и 1024 в ширину): колонка меню узкая — ужимаем отступы, чтобы «Оборудование» влезло целиком */
@@ -1400,7 +1417,6 @@ body.is-viewer #btn-edit { display: none !important; }
   .nav__logo { display: none; }
   .tab { min-height: 48px; }
   .nav__tabs { gap: 4px; }
-  .app__nav { padding-top: 2vh; }
 }
 
 /* Очень низкий экран (планшет с открытой панелью и вкладками браузера, ~450 px): меню целиком без прокрутки */

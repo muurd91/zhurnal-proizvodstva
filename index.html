@@ -68,18 +68,18 @@
   <!-- ===== Экран 2: основное окно ===== -->
   <section id="screen-main" class="screen" hidden>
     <div class="app">
-      <div class="box app__clock">
-        <div class="clock__time" id="clock-time">--:--</div>
-        <div class="clock__date" id="clock-date"></div>
-        <div class="clock__weekday" id="clock-weekday"></div>
+      <!-- Часы и смена — один блок: время отдельной карточкой занимало место, а крупным не было -->
+      <div class="box app__info">
+        <div class="info__clock">
+          <div class="clock__time" id="clock-time">--:--</div>
+          <div class="clock__date" id="clock-date"></div>
+        </div>
+        <div class="info__shift" id="shift-info"></div>
       </div>
-
-      <div class="box app__info" id="shift-info"></div>
 
       <div class="app__end">
         <div class="save-status" id="save-status" role="button" tabindex="0" aria-live="polite"></div>
         <button class="btn btn--outline" id="btn-end-shift">Закончить смену</button>
-        <button class="link-btn" id="btn-feedback" type="button">Написать замечание</button>
       </div>
 
       <nav class="app__nav">

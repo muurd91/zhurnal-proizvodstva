@@ -268,8 +268,7 @@ let lastMinute = -1;
 function tickClock() {
   const d = new Date();
   $('#clock-time').textContent = fmtTime(d);
-  $('#clock-date').textContent = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-  $('#clock-weekday').textContent = WEEKDAYS[d.getDay()];
+  $('#clock-date').textContent = `${d.getDate()} ${MONTHS[d.getMonth()]}, ${WEEKDAYS[d.getDay()]}`;
   $('#start-time').textContent = fmtTime(d);
   $('#start-date').textContent = `${d.getDate()} ${MONTHS[d.getMonth()]}, ${WEEKDAYS[d.getDay()]}`;
   if (d.getMinutes() !== lastMinute) {
@@ -682,7 +681,7 @@ function equipmentRow(e, s) {
         </span>
         <span class="eq-row__nums">
           <span class="eq-row__num"><b>${s.count}</b><i> ${plural(s.count, 'поломка', 'поломки', 'поломок')}</i></span>
-          <span class="eq-row__num"><b>${fmtDuration(s.downtime)}</b><i> простоя</i></span>
+          <span class="eq-row__num"><b>${s.count ? fmtDuration(s.downtime) : '—'}</b><i> простоя</i></span>
           <span class="eq-row__last"><i>последняя </i>${s.last ? fmtDateTime(s.last) : '—'}</span>
         </span>
         <span class="eq-row__chev">${ICONS.chevron}</span>
@@ -1239,7 +1238,10 @@ const fmtDateTime = (iso) => { const d = new Date(iso); return `${fmtDate(d)} ${
 function fmtDuration(ms) {
   const min = Math.max(0, Math.round(ms / 60000));
   const h = Math.floor(min / 60);
-  return h ? `${h} ч ${min % 60} мин` : `${min} мин`;
+  // Больше суток — в днях: «3 д», а не «72 ч 0 мин»; нулевой хвост не пишем.
+  if (h >= 24) return h % 24 ? `${Math.floor(h / 24)} д ${h % 24} ч` : `${Math.floor(h / 24)} д`;
+  if (h) return min % 60 ? `${h} ч ${min % 60} мин` : `${h} ч`;
+  return `${min} мин`;
 }
 
 const equipmentName = (id) => DB.data.equipment.find((e) => e.id === id)?.name || 'Оборудование удалено';
@@ -1278,13 +1280,31 @@ function currentShiftView() {
   const open = all.filter((b) => b.status === 'repair' && !isMaint(b)).sort((a, b) => a.start.localeCompare(b.start));
   const doneHere = all.filter((b) => b.status === 'done' && !isMaint(b) && b.shiftId === shiftId).sort((a, b) => b.start.localeCompare(a.start));
 
-  const section = (title, list) => list.length
-    ? `<section class="bd-section"><h3 class="eq-group__title">${title} · ${list.length}</h3><div class="bd-list">${list.map((b) => withTrash(breakdownCard(b), b)).join('')}</div></section>`
+  const section = (title, list, tiles = false) => list.length
+    ? `<section class="bd-section"><h3 class="eq-group__title">${title} · ${list.length}</h3>${tiles
+      ? `<div class="machines machines--down">${list.map(downTile).join('')}</div>`
+      : `<div class="bd-list">${list.map((b) => withTrash(breakdownCard(b), b)).join('')}</div>`}</section>`
     : '';
+  // Стоящие — крупными плитками с таймером, чтобы читалось издалека. В режиме правки — карточками с корзиной.
   const list = open.length || doneHere.length
-    ? section('В ремонте', open) + section('Отремонтировано в эту смену', doneHere)
+    ? section('В ремонте', open, !(state.admin && state.editing)) + section('Отремонтировано в эту смену', doneHere)
     : '<p class="muted bd-none">Поломок в эту смену не было.</p>';
   return machineGrid() + list;
+}
+
+// Плитка стоящего станка: название, причина и крупный таймер простоя (обновляется через data-since).
+function downTile(b) {
+  const mark = DB.data.equipment.find((e) => e.id === b.equipmentId)?.mark;
+  return `
+    <button class="machine machine--down" data-bd="${b.id}">
+      <span class="machine__head">
+        <span class="machine__name">${escapeHtml(equipmentName(b.equipmentId))}</span>
+        ${mark ? `<span class="machine__mark">${escapeHtml(mark)}</span>` : ''}
+      </span>
+      <span class="machine__reason">${escapeHtml(b.reason)}</span>
+      <span class="machine__timer" data-since="${b.start}">${fmtDuration(Date.now() - new Date(b.start))}</span>
+      <span class="machine__since">стоит с ${fmtWhen(b.start)}${bdTypeText(b) ? ` · ${escapeHtml(bdTypeText(b))}` : ''}</span>
+    </button>`;
 }
 
 // ---------- Сводка по станкам ----------
@@ -1372,30 +1392,27 @@ function openBreakdownForm(bd = null, eqId = null) {
     { label: 'Сохранить', primary: true, onClick: () => saveBreakdown(bd, { status, types, kind }) },
   ];
 
+  // Станок выбирается плитками прямо в форме: подгруппа (чипы, если их больше одной), затем станок.
+  let group = curEq ? curEq.group : groups.length === 1 ? groups[0] : null;
   openModal(bd ? 'Поломка' : 'Добавить поломку', `
-    <label class="field">
-      <span class="field__label">Подгруппа</span>
-      <select id="bd-group">
-        <option value="" disabled${curEq ? '' : ' selected'}>Выберите подгруппу</option>
-        ${groups.map((g) => `<option${curEq && curEq.group === g ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}
-      </select>
-    </label>
-    <label class="field">
+    <div class="field" id="bd-eq-field">
       <span class="field__label">Оборудование</span>
-      <select id="bd-eq"${curEq ? '' : ' disabled'}></select>
-    </label>
-    <label class="field">
-      <span class="field__label">Время начала остановки</span>
-      <input id="bd-start" type="datetime-local" value="${toLocalInput(bd ? new Date(bd.start) : new Date())}">
-    </label>
+      ${groups.length > 1 ? `<div class="chips" id="bd-group">${groups.map((g) => `<button type="button" class="chip" data-group="${escapeHtml(g)}">${escapeHtml(g || 'Без подгруппы')}</button>`).join('')}</div>` : ''}
+      <div class="machines machines--pick" id="bd-eq-tiles"></div>
+      <input type="hidden" id="bd-eq" value="${curEq ? curEq.id : ''}">
+    </div>
     <label class="field">
       <span class="field__label">Причина остановки</span>
-      <textarea id="bd-reason" rows="3" placeholder="Что случилось">${bd ? escapeHtml(bd.reason) : ''}</textarea>
+      <textarea id="bd-reason" rows="2" placeholder="Что случилось">${bd ? escapeHtml(bd.reason) : ''}</textarea>
     </label>
     <div class="field">
       <span class="field__label">Тип поломки <span class="muted">· можно выбрать несколько</span></span>
       <div class="chips" id="bd-type">${chips('type', CONFIG.breakdownTypes, types)}</div>
     </div>
+    <label class="field">
+      <span class="field__label">Время начала остановки</span>
+      <input id="bd-start" type="datetime-local" value="${toLocalInput(bd ? new Date(bd.start) : new Date())}">
+    </label>
     <div class="field">
       <span class="field__label">Состояние</span>
       <div class="segmented" id="bd-status">
@@ -1421,27 +1438,47 @@ function openBreakdownForm(bd = null, eqId = null) {
       <div class="field__auto">${escapeHtml(master) || '—'}</div>
     </div>
     ${editedNote(bd)}
-    <p class="error" id="bd-error" aria-live="polite" hidden></p>`, actions, { fill: true });
+    <p class="error" id="bd-error" aria-live="polite" hidden></p>`, actions, { fill: true, wide: true });
 
+  // Стоящие станки видны, но выбрать их нельзя — по ним уже открыта поломка (кроме станка этой записи).
+  const down = openBreakdowns();
   const fillEquipment = () => {
-    const g = $('#bd-group').value;
-    const sel = $('#bd-eq');
-    const items = eqList.filter((e) => e.group === g).sort(byPos);
-    sel.innerHTML = '<option value="" disabled selected>Выберите оборудование</option>' + items
-      .map((e) => `<option value="${e.id}"${curEq && curEq.id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}${e.mark ? ` · ${escapeHtml(e.mark)}` : ''}${e.inv ? ` (инв. ${escapeHtml(e.inv)})` : ''}</option>`)
-      .join('');
-    sel.disabled = !g;
+    document.querySelectorAll('#bd-group [data-group]').forEach((c) => c.classList.toggle('is-active', c.dataset.group === group));
+    const picked = $('#bd-eq').value;
+    const items = group === null ? [] : eqList.filter((e) => e.group === group).sort(byPos);
+    $('#bd-eq-tiles').innerHTML = group === null
+      ? '<p class="muted">Выберите подгруппу.</p>'
+      : items.map((e) => {
+        const busy = down.has(e.id) && e.id !== curEq?.id;
+        return `
+          <button type="button" class="machine${e.id === picked ? ' is-active' : ''}${busy ? ' machine--busy' : ''}" data-pick="${e.id}"${busy ? ' disabled' : ''}>
+            <span class="machine__name">${escapeHtml(e.name)}</span>
+            ${e.mark || busy ? `<span class="machine__mark">${busy ? '■ уже стоит' : escapeHtml(e.mark)}</span>` : ''}
+          </button>`;
+      }).join('');
   };
+  $('#bd-group')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-group]');
+    if (!chip) return;
+    group = chip.dataset.group;
+    fillEquipment();
+  });
+  $('#bd-eq-tiles').addEventListener('click', (e) => {
+    const tile = e.target.closest('[data-pick]');
+    if (!tile || tile.disabled) return;
+    $('#bd-eq').value = tile.dataset.pick;
+    modalDirty = true;
+    document.querySelectorAll('#bd-eq-tiles [data-pick]').forEach((t) => t.classList.toggle('is-active', t === tile));
+  });
   const renderStatus = () => {
     const active = status === 'done' ? 'done' : kind;
     document.querySelectorAll('#bd-status [data-status]').forEach((b) => b.classList.toggle('is-active', b.dataset.status === active));
     $('#bd-done-fields').hidden = status !== 'done';
   };
 
-  if (curEq) fillEquipment();
+  fillEquipment();
   renderStatus();
 
-  $('#bd-group').addEventListener('change', fillEquipment);
   $('#bd-type').addEventListener('click', (e) => {
     const chip = e.target.closest('[data-type]');
     if (!chip) return;
@@ -1478,7 +1515,7 @@ function saveBreakdown(bd, { status, types = [], kind = 'repair' }) {
   const startVal = $('#bd-start').value;
   const reason = $('#bd-reason').value.trim();
 
-  if (!equipmentId) return error('Выберите оборудование.', $('#bd-eq').disabled ? '#bd-group' : '#bd-eq');
+  if (!equipmentId) return error('Выберите оборудование.', '#bd-eq');
   if (!startVal) return error('Укажите время начала остановки.', '#bd-start');
   if (!reason) return error('Опишите причину остановки.', '#bd-reason');
   if (!types.length) return error('Выберите хотя бы один тип поломки.', '#bd-type');
@@ -1596,7 +1633,7 @@ function repairCard(r, clickable = true) {
   const waiting = fmtDuration((done ? new Date(r.doneAt) : new Date()) - new Date(r.createdAt));
   const tag = clickable ? 'button' : 'div';
   return `
-    <${tag} class="bd-item rq-item rq-item--${done ? 'done' : 'open'}"${clickable ? ` data-rq="${r.id}"` : ''}>
+    <${tag} class="bd-item rq-item rq-item--${done ? 'done' : r.priority === 'urgent' ? 'urgent' : 'open'}"${clickable ? ` data-rq="${r.id}"` : ''}>
       <span class="bd-item__head">
         <span class="bd-item__name">${escapeHtml(equipmentName(r.equipmentId))}${eq?.mark ? ` <span class="bd-item__mark">${escapeHtml(eq.mark)}</span>` : ''}</span>
         ${!done && r.priority === 'urgent' ? '<span class="bd-status bd-status--urgent">▲ Срочно</span>' : ''}
@@ -2411,11 +2448,16 @@ $('#btn-end-shift').addEventListener('click', () => {
     },
   ], { wide: true });
 
+  // Пока не решено по каждому станку, «Закончить смену» приглушена (нажать можно — подскажет, что осталось).
+  const primary = $('#modal-actions .btn--primary');
+  primary.classList.add('is-pending');
+
   $('#modal-body .handover-list').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-choice]');
     if (!btn) return;
     const row = btn.closest('[data-ho]');
     choice[row.dataset.ho] = btn.dataset.choice;
+    primary.classList.toggle('is-pending', Object.keys(choice).length < open.length);
     row.querySelectorAll('[data-choice]').forEach((x) => x.classList.toggle('is-active', x === btn));
     row.querySelector('.handover__close').hidden = btn.dataset.choice !== 'close';
     row.classList.toggle('is-decided', true);
@@ -2466,12 +2508,25 @@ $('#modal').addEventListener('click', (e) => {
 // ================= Настройки =================
 // Кнопка «Настройки»: настройки устройства (тема) — всем, включая зрителя;
 // вход в режим настроек — по логину и паролю.
+// Замечание пишут отсюда, а не из шапки: в шапке оно спорило с «Закончить смену». Страница — та, что открыта сейчас.
+const feedbackBox = () => {
+  const page = visibleTabs().find((t) => t.id === state.tab);
+  return `
+    <section class="data-box">
+      <h4 class="data-box__title">Замечание разработчику</h4>
+      <p class="muted">Что-то неудобно или есть идея — напишите. Страница «${escapeHtml(page ? page.title : '')}» запишется сама.</p>
+      <div class="data-box__actions"><button type="button" class="btn" id="btn-feedback">Написать замечание</button></div>
+    </section>`;
+};
+const bindFeedback = () => $('#btn-feedback').addEventListener('click', openFeedbackForm);
+
 $('#btn-settings').addEventListener('click', () => {
   if (!state.admin) {
-    openModal('Настройки', themeSwitch(), [
+    openModal('Настройки', themeSwitch() + feedbackBox(), [
       ...(state.viewer ? [] : [{ label: 'Режим настроек', onClick: () => { openLogin(); return false; } }]),
       { label: 'Закрыть', primary: true },
     ]);
+    bindFeedback();
     return;
   }
 
@@ -2479,6 +2534,7 @@ $('#btn-settings').addEventListener('click', () => {
   const updated = d.updatedAt ? new Date(d.updatedAt) : null;
   openModal('Настройки', `
     ${themeSwitch()}
+    ${feedbackBox()}
     <section class="data-box">
       <h4 class="data-box__title">Файл данных</h4>
       <p class="muted">
@@ -2497,6 +2553,7 @@ $('#btn-settings').addEventListener('click', () => {
     { label: 'Выйти из настроек', onClick: () => setAdmin(false) },
     { label: 'Закрыть', primary: true },
   ]);
+  bindFeedback();
   $('#btn-export').addEventListener('click', () => DB.exportFile());
   $('#btn-import').addEventListener('click', () => $('#file-import').click());
 });
@@ -2612,6 +2669,8 @@ let modalDirty = false;      // в окне что-то ввели — тап п
 function openModal(title, bodyHtml, actions, { wide = false, fill = false } = {}) {
   $('#modal .modal__card').classList.toggle('modal__card--wide', wide);
   $('#modal-actions').classList.toggle('modal__actions--fill', fill);
+  // Три и больше действий в строку не помещаются ровно — ставим стопкой на всю ширину, главное сверху.
+  $('#modal-actions').classList.toggle('modal__actions--stack', !fill && actions.length >= 3);
   $('#modal-body').scrollTop = 0;
   $('#modal-title').textContent = title;
   $('#modal-body').innerHTML = bodyHtml;
@@ -2684,7 +2743,7 @@ function escapeHtml(s) {
 
 // ================= Запуск =================
 $('#start-logo').innerHTML = LOGO.full;
-$('#nav-logo').innerHTML = LOGO.mark;
+$('#nav-logo').innerHTML = LOGO.full;
 $('#btn-settings .tab__icon').innerHTML = ICONS.settings;
 $('#btn-edit .edit-btn__icon').innerHTML = ICONS.edit;
 tickClock();
@@ -2794,7 +2853,6 @@ function openFeedbackForm() {
   });
   $('#fb-text').focus();
 }
-$('#btn-feedback').addEventListener('click', openFeedbackForm);
 
 function feedbackView() {
   const list = [...DB.data.feedback].sort((a, b) => (a.status === 'done') - (b.status === 'done') || b.at.localeCompare(a.at));
