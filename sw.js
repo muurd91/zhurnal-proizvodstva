@@ -4,7 +4,7 @@
 //
 // При любом изменении файлов приложения поднимать VERSION — иначе планшет будет держать старую копию.
 // Новый файл manuals/kb-*.js — добавить в SHELL.
-const VERSION = 'v62';
+const VERSION = 'v63';
 const CACHE = `jp-shell-${VERSION}`;
 
 const SHELL = [
@@ -25,8 +25,6 @@ const SHELL = [
   'manuals/kb-sigma-common.js',
   'manuals/kb-omron.js',
   'manuals/kb-yaskawa.js',
-  'manuals/kb-atlas-copco.js',
-  'manuals/kb-cross-air.js',
   'manuals/kb-shini.js',
   'manuals/kb-delta.js',
   'manuals/kb-hcfa.js',
