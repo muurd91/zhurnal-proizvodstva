@@ -1,6 +1,6 @@
 // ================= Файл данных =================
 // Все данные приложения живут в одном JSON-документе. Сейчас он хранится
-// локально в браузере; позже рядом появится адаптер OneDrive с тем же
+// локально в браузере; позже рядом появится адаптер облака (js/cloud.js, Firebase) с тем же
 // интерфейсом (load/save), и остальной код менять не придётся.
 
 const DATA_FORMAT = 'zhurnal-proizvodstva';
@@ -117,7 +117,7 @@ const DB = (() => {
 
   let saveFailed = false; // последняя запись в хранилище не удалась
 
-  let remote = null; // адаптер облака (OneDrive): localChange(), state()
+  let remote = null; // адаптер облака (Cloud, Firebase): localChange(), state()
 
   // replaceAll — файл данных загружен вручную: он заменяет и облачную копию целиком.
   function persist(replaceAll = false) {
@@ -136,8 +136,8 @@ const DB = (() => {
     get data() { return data; },
 
     // Состояние сохранения для индикатора в шапке.
-    // state: 'saved' | 'error' (память устройства) | 'local' | 'auth' | 'syncing' | 'offline' | 'cloudError' (OneDrive).
-    // pending — сколько изменений ждёт отправки; cloud — данные связаны с OneDrive.
+    // state: 'saved' | 'error' (память устройства) | 'local' | 'auth' | 'syncing' | 'offline' | 'cloudError' (облако).
+    // pending — сколько изменений ждёт отправки; cloud — данные связаны с облаком.
     get saveState() {
       if (saveFailed) return { state: 'error', at: data.updatedAt, pending: 0 };
       const cloud = remote?.state();

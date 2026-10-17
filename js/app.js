@@ -163,11 +163,11 @@ function renderTypeSwitch() {
   $('#f-start').textContent = `${fmtDate(s)}, ${fmtTime(s)}`;
 }
 
-// Перед стартом подтягиваем свежие данные из OneDrive, чтобы не пропустить смену, начатую на другом устройстве.
+// Перед стартом подтягиваем свежие данные из облака, чтобы не пропустить смену, начатую на другом устройстве.
 // Нет связи — работаем с тем, что есть на устройстве: смену на планшете нужно уметь начать и без сети.
 async function freshen() {
-  if (!OneDrive.info().connected) return;
-  await Promise.race([OneDrive.syncNow(), new Promise((resolve) => setTimeout(resolve, 5000))]);
+  if (!Cloud.info().connected) return;
+  await Promise.race([Cloud.syncNow(), new Promise((resolve) => setTimeout(resolve, 5000))]);
 }
 
 // Ошибка: смена идёт на другом устройстве. Выход — режим зрителя (или «Забрать смену» по паролю).
@@ -308,25 +308,25 @@ function fmtWhen(iso) {
   return `${fmtDate(d).slice(0, 5)} ${fmtTime(d)}`;
 }
 
-// Индикатор сохранения: память устройства (saved / error) и OneDrive (local, auth, syncing, offline, cloudError).
-// Нажатие на индикатор открывает окно подключения OneDrive.
+// Индикатор сохранения: память устройства (saved / error) и облако (local, auth, syncing, offline, cloudError).
+// Нажатие на индикатор открывает окно подключения облака.
 const SAVE_LABELS = {
-  saved:      (s) => (s.cloud ? `OneDrive${s.at ? ` · ${fmtWhen(s.at)}` : ''}` : s.at ? `Сохранено · ${fmtWhen(s.at)}` : 'Сохранено'),
+  saved:      (s) => (s.cloud ? `Облако${s.at ? ` · ${fmtWhen(s.at)}` : ''}` : s.at ? `Сохранено · ${fmtWhen(s.at)}` : 'Сохранено'),
   syncing:    () => 'Синхронизация…',
   offline:    (s) => `Офлайн, ${s.pending} ${plural(s.pending, 'изменение', 'изменения', 'изменений')}`,
   error:      () => 'Не сохранено',
   local:      () => 'Только на устройстве',
-  auth:       () => 'Войдите в OneDrive',
-  cloudError: () => 'Ошибка OneDrive',
+  auth:       () => 'Войдите в облако',
+  cloudError: () => 'Ошибка облака',
 };
 const SAVE_TITLES = {
-  saved:      (s) => (s.cloud ? 'Изменения записаны на устройстве и в OneDrive' : 'Все изменения записаны на этом устройстве'),
-  syncing:    () => 'Изменения отправляются в OneDrive',
-  offline:    () => 'Нет связи с OneDrive. Изменения сохранены на устройстве и уйдут, когда появится сеть',
+  saved:      (s) => (s.cloud ? 'Изменения записаны на устройстве и в облаке' : 'Все изменения записаны на этом устройстве'),
+  syncing:    () => 'Изменения отправляются в облако',
+  offline:    () => 'Нет связи с облаком. Изменения сохранены на устройстве и уйдут, когда появится сеть',
   error:      () => 'Последнее изменение не удалось записать в память устройства',
-  local:      () => 'Данные хранятся только на этом устройстве. Нажмите, чтобы подключить OneDrive',
-  auth:       () => 'Нужно войти в OneDrive заново. Изменения пока сохраняются на устройстве',
-  cloudError: () => 'OneDrive вернул ошибку. Нажмите, чтобы посмотреть',
+  local:      () => 'Данные хранятся только на этом устройстве. Нажмите, чтобы подключить облако',
+  auth:       () => 'Нужно войти в облако заново. Изменения пока сохраняются на устройстве',
+  cloudError: () => 'Облако вернуло ошибку. Нажмите, чтобы посмотреть',
 };
 function renderSaveStatus() {
   const s = DB.saveState;
@@ -337,34 +337,38 @@ function renderSaveStatus() {
 }
 
 function openCloudModal() {
-  const i = OneDrive.info();
+  const i = Cloud.info();
   const err = i.error ? `<p class="od-error">${escapeHtml(i.error)}</p>` : '';
-  const path = `<b>${escapeHtml(i.path)}</b>`;
   if (!i.available) {
-    openModal('OneDrive', '<p>Синхронизация работает, когда приложение открыто по адресу сайта (https). Из файла на диске она недоступна.</p>',
+    openModal('Облако', '<p>Синхронизация работает, когда приложение открыто по адресу сайта (https) и загрузился Firebase. Из файла на диске она недоступна.</p>',
       [{ label: 'Закрыть', primary: true }]);
     return;
   }
   if (!i.connected) {
-    openModal('OneDrive', `
-      <p>${i.needAuth ? 'Сеанс входа истёк — войдите заново.' : 'Данные сейчас хранятся только на этом устройстве.'}
-         Войдите в аккаунт Microsoft, и журнал будет сохраняться в OneDrive (${path}) и станет общим для всех устройств.</p>
-      <p class="muted">Пока вы не вошли, изменения сохраняются на устройстве и ничего не теряется.</p>${err}`, [
+    openModal('Облако', `
+      <p>${i.needAuth ? 'Сеанс входа закончился — войдите заново.' : 'Данные сейчас хранятся только на этом устройстве.'}
+         Войдите через Google (тем же аккаунтом, что в «Табеле смены»), и журнал будет сохраняться в облаке
+         и станет общим для всех устройств.</p>${err}
+      <p class="muted">Пока вы не вошли, изменения сохраняются на устройстве и ничего не теряется.</p>`, [
       { label: 'Позже' },
-      { label: 'Войти в OneDrive', primary: true, onClick: () => { OneDrive.signIn(); return false; } },
+      { label: 'Войти через Google', primary: true, onClick: () => {
+        // Окно держим, пока идёт вход: получилось — закрываем, нет — перерисовываем с текстом ошибки.
+        Cloud.signIn().then(() => (Cloud.info().connected ? closeModal() : openCloudModal()));
+        return false;
+      } },
     ]);
     return;
   }
   const last = i.lastSync ? `${fmtDate(new Date(i.lastSync))} ${fmtTime(new Date(i.lastSync))}` : 'ещё не было';
-  openModal('OneDrive', `
+  openModal('Облако', `
     <p>Подключено${i.account ? `: <b>${escapeHtml(i.account)}</b>` : ''}.</p>
-    <p class="muted">Файл: ${path}<br>
+    <p class="muted">Проект: ${escapeHtml(i.project)}<br>
       Последняя синхронизация: ${last}<br>
       Ждёт отправки: ${i.pending}</p>${err}
-    <p class="muted">«Отключить» не удаляет данные ни на устройстве, ни в OneDrive.</p>`, [
-    { label: 'Отключить', danger: true, onClick: () => OneDrive.signOut() },
+    <p class="muted">«Выйти» не удаляет данные ни на устройстве, ни в облаке.</p>`, [
+    { label: 'Выйти', danger: true, onClick: () => Cloud.signOut() },
     { label: 'Закрыть' },
-    { label: 'Синхронизировать', primary: true, onClick: () => OneDrive.syncNow() },
+    { label: 'Синхронизировать', primary: true, onClick: () => Cloud.syncNow() },
   ]);
 }
 $('#save-status').addEventListener('click', openCloudModal);
@@ -2893,8 +2897,8 @@ if (!visibleTabs().some((t) => t.id === state.tab)) state.tab = 'current';
 renderApp();
 if ($('#screen-main').hidden) showStartScreen();
 
-// ================= OneDrive =================
-OneDrive.onChange(renderSaveStatus);
+// ================= Облако (Firebase) =================
+Cloud.onChange(renderSaveStatus);
 // ================= Замечания =================
 // Мастер пишет замечание из любого места (в том числе в режиме зрителя); читает, ведёт статусы и удаляет их только режим настроек.
 // Запись: { id, at, kind, text, tab, master, shiftId, status }. Вкладка, мастер и смена подставляются сами.
@@ -3031,7 +3035,7 @@ DB.onActivity((events, source) => {
   }
 });
 
-OneDrive.init();
+Cloud.init();
 
 // ================= Офлайн-режим =================
 // Service worker кэширует файлы приложения. С file:// не регистрируется (так браузер не умеет).

@@ -16,13 +16,18 @@ const CONFIG = {
     night: { label: 'Ночная',  start: '20:00', end: '08:00' },
   },
 
-  // Синхронизация с OneDrive (личный аккаунт Microsoft). clientId — не секрет: это
-  // идентификатор регистрации приложения в Microsoft Entra (тип SPA, без секрета).
-  onedrive: {
-    clientId: 'a6ed8be5-8fa0-404d-9ac4-5cde51b4041a',
-    folder: 'Производственный журнал',
-    file: 'zhurnal-proizvodstva.json',
-    pollSeconds: 45, // как часто проверять, не изменил ли файл другой планшет
+  // Синхронизация с Firebase (Firestore), проект общий с «Табелем смены». Конфиг веб-приложения — не секрет:
+  // он виден любому в браузере, а доступ к данным закрывают правила Firestore и вход через Google.
+  // Все данные лежат одним документом users/<uid>/apps/zhurnal.
+  firebase: {
+    app: {
+      apiKey: 'AIzaSyC5vxVP5eH-_8C2q3UEB9JhiJYslD7Zxgk',
+      authDomain: 'proizvodstvo-8934e.firebaseapp.com',
+      projectId: 'proizvodstvo-8934e',
+      storageBucket: 'proizvodstvo-8934e.firebasestorage.app',
+      messagingSenderId: '502899625438',
+      appId: '1:502899625438:web:3cabbf6696fb712b5c614f',
+    },
   },
 
   // Статусы оборудования. Цвет у каждого свой (см. --status-* в style.css): работает — зелёный,

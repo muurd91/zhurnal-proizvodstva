@@ -1,10 +1,10 @@
 // ================= Service worker: офлайн-оболочка приложения =================
 // Кэшируются только файлы приложения. Данные (поломки, склад и т.д.) лежат в localStorage,
-// копия в OneDrive (запросы к Microsoft — другой origin); service worker их не трогает.
+// облачная копия в Firebase (запросы к Google — другой origin); service worker их не трогает.
 //
 // При любом изменении файлов приложения поднимать VERSION — иначе планшет будет держать старую копию.
 // Новый файл manuals/kb-*.js — добавить в SHELL.
-const VERSION = 'v50';
+const VERSION = 'v51';
 const CACHE = `jp-shell-${VERSION}`;
 
 const SHELL = [
@@ -15,7 +15,10 @@ const SHELL = [
   'js/config.js',
   'js/activity.js',
   'js/data.js',
-  'js/onedrive.js',
+  'js/vendor/firebase-app-compat.js',
+  'js/vendor/firebase-auth-compat.js',
+  'js/vendor/firebase-firestore-compat.js',
+  'js/cloud.js',
   'js/icons.js',
   'js/app.js',
   'manuals/kb.js',
