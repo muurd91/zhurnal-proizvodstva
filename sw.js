@@ -4,7 +4,7 @@
 //
 // При любом изменении файлов приложения поднимать VERSION — иначе планшет будет держать старую копию.
 // Новый файл manuals/kb-*.js — добавить в SHELL.
-const VERSION = 'v51';
+const VERSION = 'v52';
 const CACHE = `jp-shell-${VERSION}`;
 
 const SHELL = [
@@ -32,6 +32,13 @@ const SHELL = [
   'manuals/kb-hcfa.js',
   'manuals/kb-mitsubishi.js',
   'manuals/kb-invt.js',
+  'splash/logo.png',
+  'splash/pot-red-flowers.webp',
+  'splash/pot-pink-roses.webp',
+  'splash/pot-red-sprout.webp',
+  'splash/pot-terracotta.webp',
+  'splash/pot-black-herb.webp',
+  'splash/pot-white-planter.webp',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',

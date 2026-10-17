@@ -2897,6 +2897,16 @@ if (!visibleTabs().some((t) => t.id === state.tab)) state.tab = 'current';
 renderApp();
 if ($('#screen-main').hidden) showStartScreen();
 
+// Заставку убираем, когда экран уже нарисован, но не раньше, чем закончится анимация загрузки (SPLASH_MIN_MS = 2,6 с в CSS).
+const SPLASH_MIN_MS = 2600;
+{
+  const splash = $('#splash');
+  setTimeout(() => {
+    splash.classList.add('is-hide');
+    setTimeout(() => splash.remove(), 600);
+  }, Math.max(0, SPLASH_MIN_MS - performance.now()));
+}
+
 // ================= Облако (Firebase) =================
 Cloud.onChange(renderSaveStatus);
 // ================= Замечания =================

@@ -12,6 +12,49 @@
 </head>
 <body>
 
+  <!-- ===== Заставка «Амина»: видна сразу, пока грузятся скрипты и данные; app.js её убирает ===== -->
+  <div class="splash go" id="splash" role="status" aria-label="Загрузка">
+    <svg class="splash__bg splash__bg--land" viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sp-t1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b8f7c"/><stop offset="1" stop-color="#1d5a4a"/></linearGradient>
+        <linearGradient id="sp-t2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a5a42"/><stop offset="1" stop-color="#5c3326"/></linearGradient>
+      </defs>
+      <rect width="160" height="100" fill="url(#sp-t1)"/>
+      <polygon points="96,0 160,0 160,100 66,100" fill="url(#sp-t2)"/>
+    </svg>
+    <svg class="splash__bg splash__bg--port" viewBox="0 0 100 217" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sp-p1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b8f7c"/><stop offset="1" stop-color="#1d5a4a"/></linearGradient>
+        <linearGradient id="sp-p2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a5a42"/><stop offset="1" stop-color="#5c3326"/></linearGradient>
+      </defs>
+      <rect width="100" height="217" fill="url(#sp-p1)"/>
+      <polygon points="0,150 100,112 100,217 0,217" fill="url(#sp-p2)"/>
+    </svg>
+    <!-- горшки: горизонтально падают справа сверху вниз, вертикально пролетают слева направо -->
+    <div class="splash__pots splash__pots--land" aria-hidden="true">
+      <img class="pot" src="splash/pot-red-flowers.webp" alt="" style="--w:14cqw;--x0:60cqw;--y0:-30cqw;--x1:68cqw;--y1:72cqw;--r0:-14deg;--r1:10deg;--t:10s;--d:0s">
+      <img class="pot" src="splash/pot-pink-roses.webp" alt="" style="--w:14cqw;--x0:80cqw;--y0:-32cqw;--x1:72cqw;--y1:74cqw;--r0:-16deg;--r1:12deg;--t:12s;--d:-5s">
+      <img class="pot" src="splash/pot-red-sprout.webp" alt="" style="--w:12cqw;--x0:70cqw;--y0:-28cqw;--x1:84cqw;--y1:72cqw;--r0:10deg;--r1:-18deg;--t:9s;--d:-3s">
+      <img class="pot" src="splash/pot-terracotta.webp" alt="" style="--w:11cqw;--x0:88cqw;--y0:-26cqw;--x1:78cqw;--y1:70cqw;--r0:-20deg;--r1:8deg;--t:11s;--d:-8s">
+      <img class="pot" src="splash/pot-black-herb.webp" alt="" style="--w:12cqw;--x0:62cqw;--y0:-32cqw;--x1:56cqw;--y1:76cqw;--r0:-8deg;--r1:15deg;--t:13s;--d:-10s">
+      <img class="pot" src="splash/pot-white-planter.webp" alt="" style="--w:10cqw;--x0:76cqw;--y0:-28cqw;--x1:90cqw;--y1:72cqw;--r0:18deg;--r1:-6deg;--t:10.5s;--d:-6.5s">
+    </div>
+    <div class="splash__pots splash__pots--port" aria-hidden="true">
+      <img class="pot" src="splash/pot-red-flowers.webp" alt="" style="--w:26cqw;--x0:-34cqw;--y0:150cqw;--x1:120cqw;--y1:132cqw;--r0:-8deg;--r1:10deg;--t:11s;--d:0s">
+      <img class="pot" src="splash/pot-pink-roses.webp" alt="" style="--w:24cqw;--x0:-30cqw;--y0:176cqw;--x1:125cqw;--y1:160cqw;--r0:8deg;--r1:-12deg;--t:13s;--d:-5s">
+      <img class="pot" src="splash/pot-red-sprout.webp" alt="" style="--w:21cqw;--x0:-28cqw;--y0:136cqw;--x1:122cqw;--y1:150cqw;--r0:-14deg;--r1:8deg;--t:9s;--d:-3s">
+      <img class="pot" src="splash/pot-terracotta.webp" alt="" style="--w:20cqw;--x0:-26cqw;--y0:165cqw;--x1:120cqw;--y1:182cqw;--r0:10deg;--r1:-14deg;--t:10s;--d:-7s">
+      <img class="pot" src="splash/pot-black-herb.webp" alt="" style="--w:23cqw;--x0:-32cqw;--y0:188cqw;--x1:124cqw;--y1:172cqw;--r0:-6deg;--r1:12deg;--t:12s;--d:-9s">
+      <img class="pot" src="splash/pot-white-planter.webp" alt="" style="--w:18cqw;--x0:-24cqw;--y0:140cqw;--x1:118cqw;--y1:128cqw;--r0:6deg;--r1:-10deg;--t:8.5s;--d:-6s">
+    </div>
+    <div class="splash__content">
+      <div class="splash__card"><img class="splash__logo" src="splash/logo.png" alt="Амина"></div>
+      <div class="splash__slogan">Амина – все для<br>зеленого бизнеса</div>
+      <div class="splash__pill"><i></i><span>ЗАГРУЗКА</span></div>
+    </div>
+    <div class="splash__sig">Идея и разработка — <b>А. Н. Меньков</b></div>
+  </div>
+
   <!-- ===== Экран 1: начало смены ===== -->
   <section id="screen-start" class="screen screen--center">
     <div class="card card--start" id="start-step-1">

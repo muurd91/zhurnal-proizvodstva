@@ -1520,3 +1520,78 @@ button:focus-visible, .tab:focus-visible, .save-status:focus-visible { outline: 
 .toast__sub { font-size: max(14px, .85em); color: var(--muted); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* ================= Заставка «Амина» (splash-C-горшки) ================= */
+/* Показана с первого кадра (стили в <head>), app.js убирает её, когда экран готов. Если скрипт не загрузился,
+   заставка гаснет сама через 12 секунд — приложение не останется закрытым.
+   Размеры — в единицах --u: 1% ширины экрана, но не больше, чем позволяет высота, поэтому на любом экране ничего не обрезается. */
+.splash {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1000;
+  overflow: hidden; isolation: isolate;
+  container-type: size;
+  --u: min(1cqw, 1.6cqh);
+  --cream: #f3e3c3; --brown-d: #5c3326;
+  font-family: var(--font);
+  background: #1d5a4a;
+  transition: opacity .45s ease, visibility .45s;
+  animation: splash-fallback 0s 12s forwards;
+}
+.splash.is-hide { opacity: 0; visibility: hidden; pointer-events: none; }
+.splash__bg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; }
+.splash__bg--port, .splash__pots--port { display: none; }
+
+.splash__pots { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.pot { position: absolute; left: 0; top: 0; width: var(--w); height: auto; opacity: 0; will-change: transform;
+       filter: drop-shadow(0 1.1cqw 1.2cqw rgba(0,0,0,.38)) drop-shadow(0 0 .35cqw rgba(255,244,220,.35));
+       animation: splash-fly var(--t) linear var(--d) infinite; }
+@keyframes splash-fly {
+  0%   { opacity: 0; transform: translate(var(--x0), var(--y0)) rotate(var(--r0)); }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--x1), var(--y1)) rotate(var(--r1)); }
+}
+
+.splash__content { position: absolute; display: flex; z-index: 1; left: 0; top: 0; bottom: 0; width: 58cqw;
+  flex-direction: column; justify-content: center; align-items: flex-start; gap: calc(var(--u) * 3); padding-left: calc(var(--u) * 7); }
+.splash__card { background: rgba(243,227,195,.96); border-radius: calc(var(--u) * 3); padding: calc(var(--u) * 2.4) calc(var(--u) * 3.4);
+  box-shadow: 0 calc(var(--u) * 1.6) calc(var(--u) * 3.5) rgba(0,0,0,.3); }
+.splash__logo { display: block; width: calc(var(--u) * 17); height: auto; }
+.splash__slogan { text-transform: uppercase; letter-spacing: .06em; line-height: 1.35; font-weight: 500; color: var(--cream); font-size: calc(var(--u) * 3); }
+.splash__pill { position: relative; overflow: hidden; border-radius: 999px; width: calc(var(--u) * 19); padding: calc(var(--u) * 1.1) 0;
+  background: linear-gradient(#f0d3a8, #d9b07c); color: var(--brown-d); font-weight: 600; letter-spacing: .05em; text-align: center;
+  font-size: calc(var(--u) * 1.9); box-shadow: 0 calc(var(--u) * 1) calc(var(--u) * 2.2) rgba(0,0,0,.28), inset 0 calc(var(--u) * .2) calc(var(--u) * .3) rgba(255,255,255,.6); }
+.splash__pill i { position: absolute; inset: 0; background: rgba(255,255,255,.38); transform-origin: left; transform: scaleX(0); }
+.splash__pill span { position: relative; }
+.splash__sig { position: absolute; z-index: 2; left: calc(var(--u) * 7); bottom: calc(var(--u) * 4.2); font-size: calc(var(--u) * 1.55);
+  color: var(--cream); text-shadow: 0 .2cqw .8cqw rgba(0,0,0,.45); letter-spacing: .04em; white-space: nowrap;
+  padding: calc(var(--u) * .7) calc(var(--u) * 1.8); border-radius: 999px; background: rgba(0,0,0,.28); backdrop-filter: blur(.6cqw);
+  border: 1px solid rgba(243,227,195,.4); }
+.splash__sig b { font-weight: 600; }
+
+.splash.go .splash__pill i { animation: splash-load 2.6s ease-in-out both; }
+.splash.go .splash__card, .splash.go .splash__slogan { animation: splash-in .9s ease both; }
+.splash.go .splash__slogan { animation-delay: .25s; }
+.splash.go .splash__sig { animation: splash-sigin 1s ease 1.2s both; }
+@keyframes splash-in { from { opacity: 0; transform: translateY(2cqw); } to { opacity: 1; transform: none; } }
+@keyframes splash-load { to { transform: scaleX(1); } }
+@keyframes splash-sigin { from { opacity: 0; } to { opacity: 1; } }
+@keyframes splash-fallback { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+
+/* Вертикальный экран (планшет стоймя, телефон): горшки пролетают слева направо по нижней терракотовой зоне */
+@media (orientation: portrait) {
+  .splash { --u: min(1cqw, .4615cqh); }
+  .splash__bg--land, .splash__pots--land { display: none; }
+  .splash__bg--port { display: block; }
+  .splash__pots--port { display: block; }
+  .splash__content { left: 0; right: 0; width: auto; bottom: 38%; align-items: center; gap: calc(var(--u) * 7); padding-left: 0; }
+  .splash__card { padding: calc(var(--u) * 6) calc(var(--u) * 8); border-radius: calc(var(--u) * 6); }
+  .splash__logo { width: calc(var(--u) * 40); }
+  .splash__slogan { font-size: calc(var(--u) * 6); text-align: center; }
+  .splash__pill { width: calc(var(--u) * 48); padding: calc(var(--u) * 3) 0; font-size: calc(var(--u) * 4); }
+  .splash__sig { left: 50%; transform: translateX(-50%); bottom: calc(var(--u) * 6); font-size: calc(var(--u) * 3.4); padding: calc(var(--u) * 1.6) calc(var(--u) * 4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash { transition: none; }
+  .pot { animation: none; opacity: 1; transform: translate(var(--x0), var(--y0)); }
+  .splash.go .splash__pill i { animation: none; transform: scaleX(1); }
+}
