@@ -1,21 +1,21 @@
 /* ================= Палитра ================= */
-/* Графитовая основа. Красный, жёлтый и зелёный — только для статусов (ISA-101):
-   норма серая, цветом выделено только отклонение. Текст на статусной заливке — только --on-*. */
+/* Оливково-шалфейная основа (палитра #D9D28B · #B2BD7E · #8E9162 · #6A795D). Красный, жёлтый и зелёный — только для статусов
+   (ISA-101): норма спокойная, цветом выделено только отклонение. Текст на статусной заливке — только --on-*. */
 :root {
-  --bg: #F4F5F7; --surface: #FFFFFF; --surface-2: #EEF0F3; --border: #DADDE3;
-  --text: #16181D; --muted: #5B616E;
-  --field-border: #868C98; /* рамка полей ввода: 3:1 к фону, чтобы поле не сливалось на бликующем экране */
-  --accent: #1F2329; --accent-text: #FFFFFF; --accent-soft: #E8EAEE;
+  --bg: #E7E3B7; --surface: #F6F7F0; --surface-2: #DFE3C9; --border: #C7C8B1;
+  --text: #1D2218; --muted: #57634C;
+  --field-border: #8E9162; /* рамка полей ввода: 3:1 к фону, чтобы поле не сливалось на бликующем экране */
+  --accent: #6A795D; --accent-text: #FFFFFF; --accent-soft: #D5DBB8;
   --danger: #C9302C; --danger-soft: #FCEBEA; --on-danger: #FFFFFF;
   /* Красный для заливки (плитка стоящего станка, бейджи) отдельно от красного для текста и полос */
   --danger-fill: #C9302C; --on-danger-fill: #FFFFFF;
   --warning: #F2A900; --warning-text: #8A5A00; --warning-soft: #FFF4D6; --on-warning: #1F2329;
   --warning-line: #B07E00; /* полосы и рамки «внимание»: ярко-жёлтый на белом даёт только 2:1 */
   --ok: #1E7A4C; --ok-soft: #E6F3EC; --on-ok: #FFFFFF;
-  --brand: #3A7CA5;
+  --brand: #6A795D;
   --admin: #C2570C;
-  /* Активное (открытая вкладка, основные кнопки, выбранный сегмент): днём графит, ночью — без белых заливок */
-  --active-bg: #1F2329; --active-text: #FFFFFF; --active-border: #1F2329;
+  /* Активное (открытая вкладка, основные кнопки, выбранный сегмент): днём тёмный оливковый, ночью шалфейный на тёмном — без белых заливок */
+  --active-bg: #55614A; --active-text: #FFFFFF; --active-border: #55614A;
   --shadow: rgb(0 0 0 / .08); --shadow-strong: rgb(0 0 0 / .25); --scrim: rgb(0 0 0 / .4);
   color-scheme: light;
 
@@ -31,17 +31,17 @@
 /* Ночная тема: смена 20:00–08:00 (или выбор на устройстве). Красный здесь светлый —
    белый текст на нём нечитаем, поэтому --on-danger тёмный. */
 body.theme-night {
-  --bg: #0F1115; --surface: #171A1F; --surface-2: #1F232A; --border: #2C313A;
-  --text: #E6E8EB; --muted: #9AA1AC;
-  --field-border: #6B7280;
-  --accent: #E6E8EB; --accent-text: #0F1115; --accent-soft: #262B33;
+  --bg: #191D16; --surface: #262C21; --surface-2: #31382B; --border: #444D3C;
+  --text: #EAE6BF; --muted: #B2BD7E;
+  --field-border: #797B53;
+  --accent: #B2BD7E; --accent-text: #151A0F; --accent-soft: #3D4636;
   --danger: #FF6B5E; --danger-soft: #3A1E1C; --on-danger: #0F1115;
   --danger-fill: #B3261E; --on-danger-fill: #FFFFFF; /* насыщенный тёмный красный: не слепит в тёмном цеху */
   --warning: #F5B83D; --warning-text: #F5B83D; --warning-soft: #3A2E12; --on-warning: #0F1115;
   --warning-line: #F5B83D;
   --ok: #4CC38A; --ok-soft: #173326; --on-ok: #0F1115;
-  --brand: #6FB0D8;
-  --active-bg: #343C48; --active-text: #FFFFFF; --active-border: #C7CCD3;
+  --brand: #B2BD7E;
+  --active-bg: #4A5541; --active-text: #FFFFFF; --active-border: #B2BD7E;
   --shadow: rgb(0 0 0 / .4); --shadow-strong: rgb(0 0 0 / .6); --scrim: rgb(0 0 0 / .6);
   color-scheme: dark;
 }
@@ -142,13 +142,6 @@ button { cursor: pointer; }
 .logo__t { fill: currentColor; }
 .logo--mono .logo__g, .logo--mono .logo__r { fill: currentColor; }
 .start-logo { width: clamp(150px, 52%, 220px); }
-/* Логотип в меню — целиком (знак + AMINA), в цвете, но не шире 120px: во всю ширину он был самым ярким пятном экрана,
-   а одноцветный маленький знак расплывался в пятно. Стоит в свободном месте между «Мануалами» и «Настройками»;
-   если места мало — скрывается. */
-.nav__logo-area { flex: 1 1 0; min-height: 0; display: grid; place-items: center; padding: 12px 0; container-type: size; }
-/* 1.06 — соотношение сторон логотипа: по высоте не помещается — уменьшается пропорционально */
-.nav__logo { width: min(120px, 100%, calc(100cqh * 1.06)); pointer-events: none; }
-@container (max-height: 100px) { .nav__logo { display: none; } }
 .card__actions {
   display: flex;
   justify-content: space-between;
@@ -235,8 +228,8 @@ button { cursor: pointer; }
   grid-template-columns: var(--side) minmax(0, 1fr) auto;
   grid-template-rows: auto 1fr;
   grid-template-areas:
-    "info info  end"
-    "nav  panel panel";
+    "nav info  end"
+    "nav panel panel";
   gap: var(--gap);
   padding: var(--gap) var(--gap) 0 0;
 }
@@ -246,48 +239,31 @@ button { cursor: pointer; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+/* Шапка и карточка со знаком — шалфейным тоном, как вкладки; рабочая панель остаётся светлой (--surface) */
+.app__info, .nav__home { background: var(--surface-2); }
 
 /* Шапка: часы слева и информация о смене — одним блоком (раньше часы были отдельной карточкой над меню) */
 .app__info {
   grid-area: info;
   min-width: 0;
-  margin-left: var(--gap);
   padding: 10px 20px;
-  display: flex;
+  display: grid;
+  /* Информация о смене строго по центру блока, часы справа: боковые колонки равны, пока часам хватает места */
+  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
-  gap: 20px;
+  column-gap: 20px;
 }
-/* Знак предприятия вместо часов слева; часы переехали вправо. Знак — кнопка: открывает вкладку «Смена». */
-.app__info { position: relative; overflow: hidden; padding-right: 20px; }
-.info__logo {
-  flex: none;
-  width: 52px; min-height: var(--touch);
-  padding: 0; border: 0; border-radius: var(--radius);
-  background: transparent;
-  display: grid; place-items: center;
-}
-.info__logo svg { display: block; width: 44px; height: auto; }
-@media (hover: hover) { .info__logo:hover { background: var(--surface-2); } }
-.info__logo:active { background: var(--surface-2); }
+.app__info { position: relative; overflow: hidden; }
+.info__shift { grid-column: 2; position: relative; z-index: 1; }
 .info__clock {
-  flex: none;
+  grid-column: 3;
+  justify-self: end;
   padding-left: 20px;
   border-left: 1px solid var(--border);
   text-align: right;
-  margin-right: 64px; /* место под солнце/месяц в углу */
   position: relative; /* над солнцем/месяцем */
   z-index: 1;
 }
-/* Солнце (дневная смена) или месяц (ночная) выглядывает из правого верхнего угла блока и обрезается его краем */
-.info__sky {
-  position: absolute;
-  top: -40px; right: -40px; /* в блоке остаётся левая нижняя часть: солнце «встаёт» из угла, месяц виден серпом */
-  width: 120px; height: 120px;
-  color: var(--muted);
-  opacity: .4;
-  pointer-events: none;
-}
-.info__sky svg { display: block; width: 100%; height: 100%; }
 .clock__time { font-size: 2em; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .clock__date { margin-top: 4px; font-size: max(14px, .8em); color: var(--muted); white-space: nowrap; }
 .info__shift {
@@ -348,21 +324,30 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
 .fb-item__text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .fb-item__foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 
-/* Боковая навигация: вкладки всегда по центру колонки (сколько бы их ни было), внизу логотип и «Настройки».
-   Три строки: пустая сверху, вкладки, низ; верх и низ делят остаток поровну, поэтому вкладки встают точно посередине.
-   Если вкладкам тесно, низ уступает минимум (кнопку «Настройки»), и вкладки чуть сдвигаются вверх. */
+/* Боковая навигация: вверху карточка со знаком, внизу «Настройки», а вкладки всегда по центру между ними
+   (сколько бы их ни было: при добавлении вкладки меню центруется заново). */
 .app__nav {
   grid-area: nav;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto minmax(min-content, 1fr);
-  padding: 4px 0 var(--gap);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--gap);
+  padding: 0 0 var(--gap);
   min-height: 0;
   overflow-y: auto; /* на невысоком экране вкладки прокручиваются, а не уходят за край */
   overflow-x: hidden;
 }
 /* minmax(0, …): длинная подпись не раздвигает колонку шире меню, а переносится */
-.nav__tabs { grid-row: 2; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
-.nav__foot { grid-row: 3; display: flex; flex-direction: column; min-height: 0; }
+.nav__tabs { align-self: center; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+/* Знак предприятия: квадратная карточка вверху колонки, высота — по ширине колонки, но не больше четверти экрана.
+   Кнопка: открывает вкладку «Смена». */
+.nav__home {
+  height: min(var(--side), 24vh);
+  padding: 0;
+  display: grid; place-items: center;
+}
+.nav__home svg { display: block; width: min(56%, 120px); height: auto; }
+@media (hover: hover) { .nav__home:hover { background: var(--surface-2); } }
+.nav__home:active { background: var(--surface-2); }
 
 .tab {
   position: relative;
@@ -375,7 +360,7 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
   border: 1px solid var(--border);
   border-left: 0;
   border-radius: 0 var(--radius) var(--radius) 0;
-  background: var(--surface);
+  background: var(--surface-2); /* шалфейный тон: вкладки, шапка и знак цветные, рабочая панель светлая */
   text-align: left;
   font-size: max(14px, .85em);
   line-height: 1.15;
@@ -1397,7 +1382,7 @@ body.is-viewer #btn-edit { display: none !important; }
 /* Невысокий экран (планшет 1024×600, ноутбук с панелями браузера): вкладки пониже,
    чтобы меню вместе с «Настройками» помещалось без прокрутки */
 @media (max-height: 650px) {
-  .nav__logo { display: none; }
+  .nav__home { display: none; } /* на низком экране карточка со знаком не нужна: место нужно вкладкам */
   .tab { min-height: 48px; }
   .nav__tabs { gap: 4px; }
 }
