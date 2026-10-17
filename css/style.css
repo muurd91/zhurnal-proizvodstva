@@ -257,11 +257,37 @@ button { cursor: pointer; }
   align-items: center;
   gap: 20px;
 }
+/* Знак предприятия вместо часов слева; часы переехали вправо. Знак — кнопка: открывает вкладку «Смена». */
+.app__info { position: relative; overflow: hidden; padding-right: 20px; }
+.info__logo {
+  flex: none;
+  width: 52px; min-height: var(--touch);
+  padding: 0; border: 0; border-radius: var(--radius);
+  background: transparent;
+  display: grid; place-items: center;
+}
+.info__logo svg { display: block; width: 44px; height: auto; }
+@media (hover: hover) { .info__logo:hover { background: var(--surface-2); } }
+.info__logo:active { background: var(--surface-2); }
 .info__clock {
   flex: none;
-  padding-right: 20px;
-  border-right: 1px solid var(--border);
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+  text-align: right;
+  margin-right: 64px; /* место под солнце/месяц в углу */
+  position: relative; /* над солнцем/месяцем */
+  z-index: 1;
 }
+/* Солнце (дневная смена) или месяц (ночная) выглядывает из правого верхнего угла блока и обрезается его краем */
+.info__sky {
+  position: absolute;
+  top: -40px; right: -40px; /* в блоке остаётся левая нижняя часть: солнце «встаёт» из угла, месяц виден серпом */
+  width: 120px; height: 120px;
+  color: var(--muted);
+  opacity: .4;
+  pointer-events: none;
+}
+.info__sky svg { display: block; width: 100%; height: 100%; }
 .clock__time { font-size: 2em; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .clock__date { margin-top: 4px; font-size: max(14px, .8em); color: var(--muted); white-space: nowrap; }
 .info__shift {
@@ -322,19 +348,21 @@ body.is-viewer #btn-end-shift:active { background: var(--surface-2); }
 .fb-item__text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .fb-item__foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 
-/* Боковая навигация: 6 вкладок по центру, настройки внизу */
+/* Боковая навигация: вкладки всегда по центру колонки (сколько бы их ни было), внизу логотип и «Настройки».
+   Три строки: пустая сверху, вкладки, низ; верх и низ делят остаток поровну, поэтому вкладки встают точно посередине.
+   Если вкладкам тесно, низ уступает минимум (кнопку «Настройки»), и вкладки чуть сдвигаются вверх. */
 .app__nav {
   grid-area: nav;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 4px 0 var(--gap); /* вкладки сразу под шапкой, без пустого поля сверху */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(min-content, 1fr);
+  padding: 4px 0 var(--gap);
   min-height: 0;
   overflow-y: auto; /* на невысоком экране вкладки прокручиваются, а не уходят за край */
   overflow-x: hidden;
 }
 /* minmax(0, …): длинная подпись не раздвигает колонку шире меню, а переносится */
-.nav__tabs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.nav__tabs { grid-row: 2; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.nav__foot { grid-row: 3; display: flex; flex-direction: column; min-height: 0; }
 
 .tab {
   position: relative;

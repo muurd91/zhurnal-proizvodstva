@@ -376,7 +376,27 @@ $('#save-status').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCloudModal(); }
 });
 
+// Солнце (дневная смена) или месяц (ночная) в углу блока смены. Смена не начата — по расписанию на текущий час.
+// Фигуры залитые: контурные иконки при обрезке краем блока превращались в обрывки линий.
+const SKY = {
+  sun: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="22" fill="currentColor"/><g stroke="currentColor" stroke-width="7" stroke-linecap="round">' +
+    [0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
+      const r = a * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+      return `<line x1="${(50 + 33 * c).toFixed(1)}" y1="${(50 + 33 * s).toFixed(1)}" x2="${(50 + 46 * c).toFixed(1)}" y2="${(50 + 46 * s).toFixed(1)}"/>`;
+    }).join('') + '</g></svg>',
+  moon: '<svg viewBox="0 0 100 100"><mask id="sky-moon-cut"><rect width="100" height="100" fill="#fff"/><circle cx="66" cy="38" r="34" fill="#000"/></mask>' +
+    '<circle cx="46" cy="54" r="38" fill="currentColor" mask="url(#sky-moon-cut)"/></svg>',
+};
+function renderShiftSky() {
+  const shift = DB.data.currentShift;
+  const night = (shift ? shift.type : currentShiftType()) === 'night';
+  const el = $('#shift-sky');
+  el.innerHTML = SKY[night ? 'moon' : 'sun'];
+  el.title = night ? 'Ночная смена' : 'Дневная смена';
+}
+
 function renderShiftInfo() {
+  renderShiftSky();
   const shift = DB.data.currentShift;
   const viewerTag = state.viewer ? '<span class="viewer-tag">Режим зрителя</span>' : '';
   if (!shift) {
@@ -2840,6 +2860,8 @@ function escapeHtml(s) {
 // ================= Запуск =================
 $('#start-logo').innerHTML = LOGO.full;
 $('#nav-logo').innerHTML = LOGO.full;
+$('#btn-home').innerHTML = LOGO.mark;
+$('#btn-home').addEventListener('click', () => goTab('current'));
 $('#btn-settings .tab__icon').innerHTML = ICONS.settings;
 $('#btn-edit .edit-btn__icon').innerHTML = ICONS.edit;
 tickClock();
