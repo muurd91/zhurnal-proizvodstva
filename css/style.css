@@ -892,7 +892,7 @@ body {
 
 /* Мануалы */
 /* Поиск по мануалам прямо в панели: поле и производитель в одну строку */
-.kb-search { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); gap: 10px; margin-bottom: 10px; }
+.kb-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin-bottom: 10px; }
 .kb-search__field {
   display: flex;
   align-items: center;
@@ -909,7 +909,12 @@ body {
 .kb-search__field input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font-size: 1.1em; }
 .kb-search__field input::-webkit-search-cancel-button { display: none; } /* своя кнопка очистки — крупнее */
 .kb-search__clear { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--muted); font-size: 1em; }
-.kb-search__maker { min-height: var(--touch-lg); padding: 0 18px; border: 1px solid var(--field-border); border-radius: 999px; background: var(--surface); } /* овальный, как поле поиска рядом */
+.kb-search__maker {
+  min-height: var(--touch-lg); width: auto; max-width: 100%;
+  appearance: none; -webkit-appearance: none; /* своя стрелка: ближе к тексту и крупнее */
+  padding: 0 46px 0 20px; border: 1px solid var(--field-border); border-radius: 999px; /* овальный, как поле поиска рядом */
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238E9162' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 20px;
+}
 .kb-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
 .kb-filter__off { min-height: 40px; padding: 0 14px; }
 @media (max-width: 700px) { .kb-search { grid-template-columns: minmax(0, 1fr); } }
